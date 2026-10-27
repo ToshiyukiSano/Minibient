@@ -2,7 +2,7 @@
  * M5StickC の加速度とバッテリー電圧を MiniBient（Ambient 互換サーバー）に送るサンプル
  *
  * 対応機種: M5StickC / M5StickC Plus / M5StickC Plus2（M5Unified ライブラリを使用）
- * 必要なライブラリ: M5Unified（ライブラリマネージャーからインストール）, AmbientLite
+ * 必要なライブラリ: M5Unified（ライブラリマネージャーからインストール）, MinibientClient
  *
  *   d1: 加速度X [G]   d2: 加速度Y [G]   d3: 加速度Z [G]   d4: バッテリー電圧 [V]
  *
@@ -12,7 +12,7 @@
 #include <M5Unified.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include "AmbientLite.h"
+#include "MinibientClient.h"
 
 // ===== ここを書きかえる =================================
 const char *WIFI_SSID     = "教室のWiFi名";
@@ -31,7 +31,7 @@ const uint32_t SEND_INTERVAL_MS = 30 * 1000;     // 送信間隔（30秒）。�
 
 WiFiClientSecure secureClient;   // https 用
 WiFiClient plainClient;          // http 用
-AmbientLite ambient;
+MinibientClient ambient;
 uint32_t lastSend = 0;
 uint32_t sentCount = 0;
 

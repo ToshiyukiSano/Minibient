@@ -11,7 +11,7 @@ __pycache__/
 *.pyc
 
 # 配布用に作るもの
-arduino/AmbientLite.zip
+arduino/MinibientClient.zip
 *.zip
 
 # OS / エディター

@@ -276,12 +276,12 @@ function showHow() {
     </div>
     ${minSec ? `<p style="margin:0;font-size:14px">このサーバーは、前回の受信から <b>${minSec}秒</b> たたないうちに届いた送信を受け付けません（エラー 429）。</p>` : ""}
     ${https ? `<p style="margin:0;font-size:14px;color:var(--muted)">https（暗号化）で送る例です。http（ポート80、<code>${MB.esc(httpUrl)}</code>）で送ることもできます。</p>` : ""}
-    <div><b>Arduino（AmbientLite ライブラリ）</b>
+    <div><b>Arduino（MinibientClient ライブラリ）</b>
 <pre class="code">#include &lt;WiFi.h&gt;
-${https ? "#include &lt;WiFiClientSecure.h&gt;\n" : ""}#include "AmbientLite.h"
+${https ? "#include &lt;WiFiClientSecure.h&gt;\n" : ""}#include "MinibientClient.h"
 
 ${https ? "WiFiClientSecure client;   // https で送るとき" : "WiFiClient client;"}
-AmbientLite ambient;
+MinibientClient ambient;
 
 void setup() {
   // …WiFi 接続のあと

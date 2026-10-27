@@ -1,10 +1,10 @@
 /*
- * AmbientLite - Ambient (ambidata.io) 互換サーバーへデータを送る小さなライブラリ
+ * MinibientClient - Ambient (ambidata.io) 互換サーバーへデータを送る小さなライブラリ
  *
  * 公式 Ambient ライブラリとほぼ同じ使い方で、送信先のサーバーとポートを指定できます。
  * MiniBient（自前サーバー）にも、本家 ambidata.io にも送れます。
  *
- *   AmbientLite ambient;
+ *   MinibientClient ambient;
  *   ambient.begin(channelId, writeKey, &client, "192.168.1.10", 8080);
  *
  *   // https（暗号化）で送る場合: WiFiClientSecure を使い、ポートを 443 にする
@@ -18,8 +18,8 @@
  *
  * 対応: ESP32 (M5StickC / M5StickC Plus / Plus2 / M5Stack など), ESP8266
  */
-#ifndef AMBIENT_LITE_H
-#define AMBIENT_LITE_H
+#ifndef MINIBIENT_CLIENT_H
+#define MINIBIENT_CLIENT_H
 
 #include <Arduino.h>
 #if defined(ESP8266)
@@ -30,12 +30,12 @@
   #include <HTTPClient.h>
 #endif
 
-#define AMBIENT_LITE_NUM_PARAMS 11   // d1〜d8, lat(9), lng(10), created(11)
-#define AMBIENT_LITE_TIMEOUT    10000UL
+#define MINIBIENT_CLIENT_NUM_PARAMS 11   // d1〜d8, lat(9), lng(10), created(11)
+#define MINIBIENT_CLIENT_TIMEOUT    10000UL
 
-class AmbientLite {
+class MinibientClient {
 public:
-  AmbientLite();
+  MinibientClient();
 
   // host には IP アドレス（"192.168.1.10"）かホスト名を指定します
   // basePath はサーバーをサブフォルダーに置いた場合のフォルダー（例 "/minibient"）
@@ -53,10 +53,10 @@ public:
   void setHttps(bool on) { https_ = on; }  // 443 以外のポートで https を使う場合
 
   // 送信。成功すると true。結果の HTTP ステータスは status に入ります
-  bool send(uint32_t timeoutMs = AMBIENT_LITE_TIMEOUT);
+  bool send(uint32_t timeoutMs = MINIBIENT_CLIENT_TIMEOUT);
 
   // まとめて送信。json は {"writeKey":"...","data":[{...},{...}]} の形
-  bool bulk_send(const char *json, uint32_t timeoutMs = AMBIENT_LITE_TIMEOUT);
+  bool bulk_send(const char *json, uint32_t timeoutMs = MINIBIENT_CLIENT_TIMEOUT);
 
   int status;          // 200 なら成功。負の値は接続エラー（HTTPClient のエラーコード）
   String response;     // サーバーからの返答（エラー内容の確認用）
@@ -73,8 +73,8 @@ private:
   String basePath_;
   uint16_t port_;
   bool https_;
-  bool isSet_[AMBIENT_LITE_NUM_PARAMS];
-  String item_[AMBIENT_LITE_NUM_PARAMS];
+  bool isSet_[MINIBIENT_CLIENT_NUM_PARAMS];
+  String item_[MINIBIENT_CLIENT_NUM_PARAMS];
   bool cmntSet_;
   String cmnt_;
 };

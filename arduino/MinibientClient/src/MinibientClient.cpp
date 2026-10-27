@@ -1,15 +1,15 @@
-#include "AmbientLite.h"
+#include "MinibientClient.h"
 
-static const char *kKeys[AMBIENT_LITE_NUM_PARAMS] = {
+static const char *kKeys[MINIBIENT_CLIENT_NUM_PARAMS] = {
   "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "lat", "lng", "created"
 };
 
-AmbientLite::AmbientLite()
+MinibientClient::MinibientClient()
   : status(0), client_(nullptr), channelId_(0), port_(80), https_(false), cmntSet_(false) {
   clearAll();
 }
 
-bool AmbientLite::begin(unsigned int channelId, const char *writeKey, WiFiClient *client,
+bool MinibientClient::begin(unsigned int channelId, const char *writeKey, WiFiClient *client,
                         const char *host, uint16_t port, const char *basePath) {
   if (client == nullptr || writeKey == nullptr || host == nullptr) return false;
   basePath_ = basePath ? basePath : "";
@@ -27,45 +27,45 @@ bool AmbientLite::begin(unsigned int channelId, const char *writeKey, WiFiClient
   return true;
 }
 
-bool AmbientLite::set(int field, const char *value) {
+bool MinibientClient::set(int field, const char *value) {
   int i = field - 1;
-  if (i < 0 || i >= AMBIENT_LITE_NUM_PARAMS || value == nullptr) return false;
+  if (i < 0 || i >= MINIBIENT_CLIENT_NUM_PARAMS || value == nullptr) return false;
   isSet_[i] = true;
   item_[i] = value;
   return true;
 }
 
-bool AmbientLite::set(int field, double value) {
+bool MinibientClient::set(int field, double value) {
   if (isnan(value) || isinf(value)) return false;
   char buf[24];
   snprintf(buf, sizeof(buf), "%.8g", value);
   return set(field, (const char *)buf);
 }
 
-bool AmbientLite::set(int field, int value) { return set(field, (long)value); }
+bool MinibientClient::set(int field, int value) { return set(field, (long)value); }
 
-bool AmbientLite::set(int field, long value) {
+bool MinibientClient::set(int field, long value) {
   char buf[16];
   snprintf(buf, sizeof(buf), "%ld", value);
   return set(field, (const char *)buf);
 }
 
-bool AmbientLite::setcmnt(const char *comment) {
+bool MinibientClient::setcmnt(const char *comment) {
   if (comment == nullptr) return false;
   cmntSet_ = true;
   cmnt_ = comment;
   return true;
 }
 
-bool AmbientLite::clear(int field) {
+bool MinibientClient::clear(int field) {
   int i = field - 1;
-  if (i < 0 || i >= AMBIENT_LITE_NUM_PARAMS) return false;
+  if (i < 0 || i >= MINIBIENT_CLIENT_NUM_PARAMS) return false;
   isSet_[i] = false;
   return true;
 }
 
-void AmbientLite::clearAll() {
-  for (int i = 0; i < AMBIENT_LITE_NUM_PARAMS; i++) {
+void MinibientClient::clearAll() {
+  for (int i = 0; i < MINIBIENT_CLIENT_NUM_PARAMS; i++) {
     isSet_[i] = false;
     item_[i] = "";
   }
@@ -73,7 +73,7 @@ void AmbientLite::clearAll() {
   cmnt_ = "";
 }
 
-void AmbientLite::appendEscaped(String &out, const char *s) {
+void MinibientClient::appendEscaped(String &out, const char *s) {
   for (; *s; s++) {
     char c = *s;
     if (c == '"' || c == '\\') { out += '\\'; out += c; }
@@ -84,13 +84,13 @@ void AmbientLite::appendEscaped(String &out, const char *s) {
   }
 }
 
-bool AmbientLite::send(uint32_t timeoutMs) {
+bool MinibientClient::send(uint32_t timeoutMs) {
   String body;
   body.reserve(256);
   body += "{\"writeKey\":\"";
   appendEscaped(body, writeKey_.c_str());
   body += "\"";
-  for (int i = 0; i < AMBIENT_LITE_NUM_PARAMS; i++) {
+  for (int i = 0; i < MINIBIENT_CLIENT_NUM_PARAMS; i++) {
     if (!isSet_[i]) continue;
     body += ",\"";
     body += kKeys[i];
@@ -110,12 +110,12 @@ bool AmbientLite::send(uint32_t timeoutMs) {
   return ok;
 }
 
-bool AmbientLite::bulk_send(const char *json, uint32_t timeoutMs) {
+bool MinibientClient::bulk_send(const char *json, uint32_t timeoutMs) {
   if (json == nullptr) return false;
   return post(basePath_ + "/api/v2/channels/" + String(channelId_) + "/dataarray", String(json), timeoutMs);
 }
 
-bool AmbientLite::post(const String &path, const String &body, uint32_t timeoutMs) {
+bool MinibientClient::post(const String &path, const String &body, uint32_t timeoutMs) {
   status = 0;
   response = "";
   if (client_ == nullptr) { status = -100; return false; }
@@ -137,7 +137,7 @@ bool AmbientLite::post(const String &path, const String &body, uint32_t timeoutM
   return status == 200;
 }
 
-String AmbientLite::errorString() {
+String MinibientClient::errorString() {
   switch (status) {
     case 200: return "OK";
     case 0:    return "まだ送信していません";

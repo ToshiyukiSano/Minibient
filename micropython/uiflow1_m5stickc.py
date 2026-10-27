@@ -1,5 +1,5 @@
 # UIFlow 1（M5StickC / M5StickC Plus）用サンプル
-# UIFlow の「Python」タブに貼り付けて実行します。ambient_lite.py は使わず単体で動きます。
+# UIFlow の「Python」タブに貼り付けて実行します。minibient_client.py は使わず単体で動きます。
 #
 #   d1: 加速度X [G]  d2: 加速度Y [G]  d3: 加速度Z [G]  d4: バッテリー電圧 [V]
 #   ボタンA を押すと送信します（コメント「ボタン」付き）。前回の送信から30秒たつまでは WAIT と表示

@@ -14,7 +14,7 @@ minibient/
 ├── server.py              サーバー本体
 ├── static/                画面（HTML/CSS/JS）
 ├── tools/simulate.py      M5StickC の代わりにダミーデータを送るテスト用
-├── arduino/AmbientLite/   Arduino 用ライブラリ（送信先を指定できる Ambient 互換）
+├── arduino/MinibientClient/   Arduino 用ライブラリ（送信先を指定できる Ambient 互換）
 ├── micropython/           UIFlow 1 / UIFlow 2 / MicroPython 用
 ├── sakura/                レンタルサーバー（CGI）用の index.cgi・.htaccess・check.cgi
 ├── start.bat / start.sh   起動用
@@ -95,12 +95,12 @@ python3 tools/simulate.py --server http://localhost:8080 --admin-password XXXX -
 
 ### Arduino IDE の場合
 
-公式の Ambient ライブラリは送信先が `ambidata.io` に固定されているため、送信先を指定できる **AmbientLite** を同梱しています。
+公式の Ambient ライブラリは送信先が `ambidata.io` に固定されているため、送信先を指定できる **MinibientClient** を同梱しています。
 
-1. 同梱の `arduino/AmbientLite.zip` を Arduino IDE の「スケッチ → ライブラリをインクルード → .ZIP 形式のライブラリをインストール」で追加
-   （または `AmbientLite` フォルダーを `Documents/Arduino/libraries/` にコピー）
+1. `arduino/MinibientClient` フォルダーを `Documents/Arduino/libraries/` にコピー
+   （または `MinibientClient` フォルダーを zip にして、Arduino IDE の「スケッチ → ライブラリをインクルード → .ZIP 形式のライブラリをインストール」で追加）
 2. ライブラリマネージャーで **M5Unified** をインストール
-3. 「ファイル → スケッチ例 → AmbientLite → M5StickC_IMU」を開き、先頭の WiFi・サーバー・チャネルID・ライトキーを書きかえて書き込み
+3. 「ファイル → スケッチ例 → MinibientClient → M5StickC_IMU」を開き、先頭の WiFi・サーバー・チャネルID・ライトキーを書きかえて書き込み
 
 公式 Ambient ライブラリで書いたプログラムからの変更点は3行だけです。
 
@@ -108,8 +108,8 @@ python3 tools/simulate.py --server http://localhost:8080 --admin-password XXXX -
 - #include "Ambient.h"
 - Ambient ambient;
 - ambient.begin(channelId, writeKey, &client);
-+ #include "AmbientLite.h"
-+ AmbientLite ambient;
++ #include "MinibientClient.h"
++ MinibientClient ambient;
 + ambient.begin(channelId, writeKey, &client, "192.168.1.10", 8080);
 ```
 
@@ -174,7 +174,7 @@ docker run -d -p 8080:8080 -v minibient-data:/data -e MB_ADMIN_PASSWORD=好き�
 ```
 
 **インターネット上に公開する場合の注意**
-M5StickC からの送信は HTTP（暗号化なし）です。ライトキーが盗み見られても困らない用途（講座のデモなど）に留めてください。ブラウザーの閲覧だけ HTTPS にしたい場合は、Caddy などのリバースプロキシで HTTPS と HTTP の両方を受けるようにします（AmbientLite は HTTPS 送信には未対応です）。管理パスワードは必ず長いものを設定してください。
+M5StickC からの送信は HTTP（暗号化なし）です。ライトキーが盗み見られても困らない用途（講座のデモなど）に留めてください。ブラウザーの閲覧だけ HTTPS にしたい場合は、Caddy などのリバースプロキシで HTTPS と HTTP の両方を受けるようにします（MinibientClient 1.1 以降は HTTPS でも送れます。下の「https（SSL）で公開する場合」を参照）。管理パスワードは必ず長いものを設定してください。
 
 ---
 
@@ -234,7 +234,7 @@ SSL を設定したら `index.cgi` の `PREFER_HTTPS = True` にします（常�
 - 送信方法ページ・チャネル画面の「送信方法」・キーカードは https（ポート 443）で案内します
 - **http での送信も引き続き受け付けます**。サーバー（さくらのコントロールパネル）の「HTTPS に転送する」設定はオフのままにしてください。オンにすると http で送る M5StickC が失敗します
 
-M5StickC から https で送るには、AmbientLite（1.1 以降）で `WiFiClientSecure` を使い、ポートを 443 にします。
+M5StickC から https で送るには、MinibientClient（1.1 以降）で `WiFiClientSecure` を使い、ポートを 443 にします。
 
 ```cpp
 #include <WiFiClientSecure.h>

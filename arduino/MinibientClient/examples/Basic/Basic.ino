@@ -1,5 +1,5 @@
 /*
- * AmbientLite のいちばん簡単な例（ESP32 / ESP8266 共通）
+ * MinibientClient のいちばん簡単な例（ESP32 / ESP8266 共通）
  * 乱数を d1 に 30秒おきに送ります（サーバーは25秒未満の間隔の送信を拒否します）。
  */
 #if defined(ESP8266)
@@ -11,7 +11,7 @@
   #include <WiFiClientSecure.h>
   using SecureClient = WiFiClientSecure;
 #endif
-#include "AmbientLite.h"
+#include "MinibientClient.h"
 
 const char *WIFI_SSID     = "教室のWiFi名";
 const char *WIFI_PASSWORD = "WiFiのパスワード";
@@ -21,7 +21,7 @@ const unsigned int CHANNEL_ID = 10001;
 const char *WRITE_KEY = "0123456789abcdef";
 
 SecureClient client;   // https 用（http で送るなら WiFiClient client; に）
-AmbientLite ambient;
+MinibientClient ambient;
 
 void setup() {
   Serial.begin(115200);
