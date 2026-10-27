@@ -1,0 +1,21 @@
+# 実行時にできるもの（パスワードやデータを含むので絶対にコミットしない）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+admin_password.txt
+minibient_data/
+
+# Python
+__pycache__/
+*.pyc
+
+# 配布用に作るもの
+arduino/AmbientLite.zip
+*.zip
+
+# OS / エディター
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

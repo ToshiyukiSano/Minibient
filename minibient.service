@@ -1,0 +1,13 @@
+[Unit]
+Description=MiniBient (Ambient compatible IoT data server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/minibient
+ExecStart=/usr/bin/python3 /opt/minibient/server.py --port 8080
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

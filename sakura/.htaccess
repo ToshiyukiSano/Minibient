@@ -1,0 +1,31 @@
+# MiniBient（CGI 版）用の設定。index.cgi と同じフォルダーに置きます。
+
+DirectoryIndex index.cgi
+
+# CSS や JavaScript の日本語が文字化けしないように文字コードを UTF-8 と明示
+AddDefaultCharset UTF-8
+<IfModule mod_mime.c>
+  AddCharset UTF-8 .css .js .html .svg
+</IfModule>
+
+# プログラムやデータのファイルは Web から見えないようにする
+<FilesMatch "\.(py|pyc|db|db-journal|db-wal|db-shm|txt|md|sh|bat|service)$|^Dockerfile$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# ファイルとして存在しない URL（/api/... や /ch/10001 など）はすべて index.cgi に渡す
+# ※ このフォルダーで RewriteEngine On にすると、上の階層の「常時 HTTPS に転送」する
+#    リライト設定はこのフォルダーには効かなくなります（M5StickC から http で送れるようにするため）
+RewriteEngine On
+# 書き換えの基準になる URL 上のフォルダー。ドメインの直下に置いた場合は「/」、
+# サブフォルダーに置いた場合は「/minibient/」のようにフォルダー名に合わせて書きかえてください
+RewriteBase /
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.cgi/$1 [L,QSA]

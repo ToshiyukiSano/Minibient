@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>送信方法（curl） - MiniBient</title>
+<link rel="icon" href="static/favicon.svg">
+<link rel="stylesheet" href="static/style.css">
+<style>
+  .guide { max-width: 880px; }
+  .guide h2 { margin-top: 36px; }
+  .guide p { max-width: 72ch; }
+  .code-wrap { position: relative; margin: 8px 0 4px; }
+  .code-wrap button.copy { position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 4px 10px;
+    background: rgba(255,255,255,.12); color: #e6edf5; border-color: rgba(255,255,255,.25); }
+  .code-wrap button.copy:hover { border-color: #fff; }
+  .code-wrap pre.code { padding-right: 84px; }
+  .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .note { font-size: 14px; color: var(--muted); }
+  table.ref { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--sheet); }
+  table.ref th, table.ref td { border-bottom: 1px solid var(--grid); padding: 8px 10px; text-align: left; vertical-align: top; }
+  table.ref th { background: #eef2f6; }
+  table.ref code, p code, li code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; background: var(--signal-soft); padding: 1px 6px; border-radius: var(--radius-s); font-size: .92em; }
+</style>
+</head>
+<body>
+<main class="guide">
+  <h1>送信方法（curl）</h1>
+  <p class="lead">パソコンのコマンドラインから、curl でデータを送る方法です。M5StickC をつなぐ前の動作確認にも使えます。</p>
+
+  <div class="sheet">
+    <b>あなたのチャネル</b>
+    <p class="note" id="paramNote" style="margin:4px 0 12px">下の欄に入れた値が、このページのコマンドにすべて反映されます。</p>
+    <div class="params">
+      <label class="f" id="mineRow" hidden><span>自分のチャネルから選ぶ</span><select id="mine"></select></label>
+      <label class="f"><span>チャネルID</span><input id="pId" inputmode="numeric" placeholder="例：10001"></label>
+      <label class="f"><span>ライトキー</span><input id="pKey" autocomplete="off" autocapitalize="off" placeholder="16文字の英数字"></label>
+    </div>
+  </div>
+
+  <h2>1回だけ送る</h2>
+  <p>d1〜d8 に数値を入れて送ります。使わない項目は書かなくてかまいません。</p>
+  <div class="seg" role="group" aria-label="使っているOS" id="osTabs" style="margin-top:4px">
+    <button data-os="unix" aria-pressed="true">Mac / Linux</button>
+    <button data-os="cmd" aria-pressed="false">Windows（コマンドプロンプト）</button>
+    <button data-os="ps" aria-pressed="false">Windows（PowerShell）</button>
+  </div>
+  <div id="once"></div>
+  <p class="note" id="httpNote" hidden></p>
+  <p class="note">成功すると <code>{"status": "ok", "count": 1}</code> と表示され、グラフのページ（<a id="chLink" href="./">チャネルのページ</a>）にデータが追加されます。</p>
+
+  <h2>一定間隔で送り続ける</h2>
+  <p>30秒ごとに乱数を送ります。グラフが動く様子を確かめたいときに使います。止めるときは <code>Ctrl + C</code> を押します。</p>
+  <div id="loop"></div>
+
+  <h2>届いたデータを確認する</h2>
+  <p>新しい順に5件を取り出します。<code>n=</code> の数字で件数を変えられます。</p>
+  <div id="read"></div>
+
+  <h2>送れるデータ</h2>
+  <table class="ref">
+    <thead><tr><th>項目</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td><code>writeKey</code></td><td>チャネルのライトキー（必須）</td></tr>
+      <tr><td><code>d1</code> 〜 <code>d8</code></td><td>数値データ。最大8種類まで。<code>23.5</code> のような数値でも <code>"23.5"</code> のような文字列でも受け付けます</td></tr>
+      <tr><td><code>cmnt</code></td><td>コメント（文字列）。グラフで確認できます</td></tr>
+      <tr><td><code>created</code></td><td>測定した時刻（省略するとサーバーが受け取った時刻）。<code>"2026-10-27 10:00:00"</code>（日本時間）や UNIX 時刻（秒・ミリ秒）で指定します</td></tr>
+      <tr><td><code>lat</code>, <code>lng</code></td><td>緯度・経度（使う場合のみ）</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="limit">送信の間隔について</h2>
+  <p id="limitText">同じチャネルへの送信は、前回の受信から一定時間あける必要があります。</p>
+
+  <h2>うまくいかないとき</h2>
+  <table class="ref">
+    <thead><tr><th>返ってきた結果</th><th>原因と直し方</th></tr></thead>
+    <tbody>
+      <tr><td>200 <code>{"status": "ok", ...}</code></td><td>成功です</td></tr>
+      <tr><td>403 「writeKey が違います」</td><td>ライトキーが間違っています。マイページか配布されたキーカードで確認してください</td></tr>
+      <tr><td>404 「チャネル … は存在しません」</td><td>チャネルIDが間違っています</td></tr>
+      <tr><td>429 「… 秒たっていないため受け付けませんでした」</td><td>前回の送信から間隔が短すぎます。表示された秒数だけ待ってから送ってください</td></tr>
+      <tr><td>400 「JSON の形式が正しくありません」</td><td><code>{ }</code> の中の書き方が崩れています。コマンドプロンプトでは <code>"</code> の前に <code>\</code> が必要です（上の例をそのままコピーしてください）</td></tr>
+      <tr><td>「SSL certificate problem」などの証明書エラー</td><td>パソコンの日付・時刻がずれていないか確認してください。古い curl で起きる場合は、アドレスを <code>http://</code> に変えても送れます</td></tr>
+      <tr><td>301 / 302（転送）</td><td>アドレスの書き間違いがないか確認してください（<code>/api/v2/channels/…/data</code> まで正しく入っているか）</td></tr>
+      <tr><td><code>curl</code> が見つからない</td><td>Windows 10 以降は標準で入っています。コマンドプロンプトでは <code>curl.exe</code> と入力してください</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<script src="static/common.js"></script>
+<script>
+let os = "unix";
+try { os = localStorage.getItem("mb_guide_os") || "unix"; } catch (_) {}
+
+function codeBlock(text) {
+  return `<div class="code-wrap"><button class="copy" type="button">コピー</button><pre class="code">${MB.esc(text)}</pre></div>`;
+}
+
+function render() {
+  const id = document.getElementById("pId").value.trim() || "チャネルID";
+  const key = document.getElementById("pKey").value.trim() || "ライトキー";
+  const { url, https, httpUrl } = MB.target();
+  const hn = document.getElementById("httpNote");
+  hn.hidden = !https;
+  if (https) hn.innerHTML = `暗号化された https で送る例です。https が使えない環境では、アドレスを <code>${MB.esc(httpUrl)}/api/v2/channels/${MB.esc(document.getElementById("pId").value.trim() || "チャネルID")}/data</code> にすれば http でも送れます。`;
+  const ep = `${url}/api/v2/channels/${id}/data`;
+  const min = Math.ceil((MB.info && MB.info.minInterval) || 0);
+  const wait = min ? Math.max(30, min + 5) : 30;
+
+  const once = {
+    unix: `curl -X POST ${ep} \\\n  -H "Content-Type: application/json" \\\n  -d '{"writeKey":"${key}","d1":23.5,"d2":60,"d3":1013}'`,
+    cmd: `curl.exe -X POST ${ep} -H "Content-Type: application/json" -d "{\\"writeKey\\":\\"${key}\\",\\"d1\\":23.5,\\"d2\\":60,\\"d3\\":1013}"`,
+    ps: `Invoke-RestMethod -Method Post -Uri ${ep} -ContentType "application/json" -Body '{"writeKey":"${key}","d1":23.5,"d2":60,"d3":1013}'`,
+  };
+  const loop = {
+    unix: `while true; do\n  curl -s -X POST ${ep} \\\n    -H "Content-Type: application/json" \\\n    -d "{\\"writeKey\\":\\"${key}\\",\\"d1\\":$((RANDOM % 100)),\\"d2\\":$((RANDOM % 50)),\\"d3\\":$((RANDOM % 10))}"\n  echo; sleep ${wait}\ndone`,
+    cmd: `:: コマンドプロンプトで送り続けるのは手間がかかるため、PowerShell をおすすめします。\n:: 下は PowerShell を呼び出して送り続ける例です。\npowershell -Command "while ($true) { $b = @{ writeKey = '${key}'; d1 = Get-Random -Max 100; d2 = Get-Random -Max 50; d3 = Get-Random -Max 10 } | ConvertTo-Json; Invoke-RestMethod -Method Post -Uri ${ep} -ContentType 'application/json' -Body $b; Start-Sleep ${wait} }"`,
+    ps: `while ($true) {\n  $body = @{ writeKey = "${key}"; d1 = Get-Random -Max 100; d2 = Get-Random -Max 50; d3 = Get-Random -Max 10 } | ConvertTo-Json\n  Invoke-RestMethod -Method Post -Uri ${ep} -ContentType "application/json" -Body $body\n  Start-Sleep ${wait}\n}`,
+  };
+  const read = {
+    unix: `curl "${ep}?n=5"`,
+    cmd: `curl.exe "${ep}?n=5"`,
+    ps: `Invoke-RestMethod -Uri "${ep}?n=5"`,
+  };
+  document.getElementById("once").innerHTML = codeBlock(once[os]);
+  document.getElementById("loop").innerHTML = codeBlock(loop[os]);
+  document.getElementById("read").innerHTML = codeBlock(read[os]);
+  document.querySelectorAll("button.copy").forEach(b => b.onclick = () => MB.copy(b.nextElementSibling.textContent));
+  document.querySelectorAll("#osTabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.os === os));
+  const link = document.getElementById("chLink");
+  if (/^\d+$/.test(id)) { link.href = "ch/" + id; link.textContent = `チャネル ${id} のページ`; }
+  else { link.href = "./"; link.textContent = "チャネルのページ"; }
+  document.getElementById("limitText").textContent = min
+    ? `同じチャネルへの送信は、前回の受信から ${min} 秒以上あける必要があります。それより短い間隔で届いた送信は 429 で拒否され、保存されません。続けて送るときは ${wait} 秒ごとがおすすめです（通信の遅れで間隔が縮んでもはじかれないように、少し余裕を持たせています）。`
+    : "このサーバーでは送信間隔の制限はありません。";
+}
+
+document.querySelectorAll("#osTabs button").forEach(b => b.onclick = () => {
+  os = b.dataset.os;
+  try { localStorage.setItem("mb_guide_os", os); } catch (_) {}
+  render();
+});
+["pId", "pKey"].forEach(id => document.getElementById(id).addEventListener("input", render));
+
+(async () => {
+  await MB.loadInfo();
+  MB.header("guide");
+  const q = new URLSearchParams(location.search);
+  if (q.get("ch")) document.getElementById("pId").value = q.get("ch");
+  if (/windows/i.test(navigator.userAgent) && !localStorage.getItem("mb_guide_os")) os = "ps";
+  // ログイン中なら自分のチャネルを選べるようにする
+  if (MB.user()) {
+    try {
+      const me = await MB.api("api/auth/me");
+      if (me.channels.length) {
+        const sel = document.getElementById("mine");
+        sel.innerHTML = me.channels.map(c => `<option value="${c.chId}">${c.chId}：${MB.esc(c.name)}</option>`).join("");
+        document.getElementById("mineRow").hidden = false;
+        const pick = id => {
+          const c = me.channels.find(x => String(x.chId) === String(id)) || me.channels[0];
+          sel.value = c.chId;
+          document.getElementById("pId").value = c.chId;
+          document.getElementById("pKey").value = c.writeKey;
+          render();
+        };
+        sel.onchange = () => pick(sel.value);
+        pick(q.get("ch") || me.channels[0].chId);
+        document.getElementById("paramNote").textContent = "あなたのチャネルのIDとライトキーが入っています。コマンドはそのままコピーして使えます。";
+      }
+    } catch (_) {}
+  } else {
+    document.getElementById("paramNote").innerHTML = '下の欄に入れた値が、このページのコマンドにすべて反映されます。<a href="login?next=guide">ログイン</a>すると自分のチャネルから選べます。';
+  }
+  render();
+})();
+</script>
+</body>
+</html>

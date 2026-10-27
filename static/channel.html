@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>チャネル - MiniBient</title>
+<link rel="icon" href="static/favicon.svg">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<main>
+  <div class="ch-head">
+    <div class="grow">
+      <h1 id="name">読み込み中…</h1>
+      <div class="ch-meta num">
+        <span>チャネルID <b id="cid"></b></span>
+        <span id="last"></span>
+        <span id="count"></span>
+        <span id="vis"></span>
+      </div>
+      <p class="lead" id="desc" style="margin:6px 0 0"></p>
+    </div>
+    <div class="row">
+      <button id="btnHow">送信方法</button>
+      <button id="btnCsv">CSV ダウンロード</button>
+      <button id="btnSettings">設定</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="表示範囲" id="ranges">
+      <button data-r="n100" aria-pressed="true">最新100件</button>
+      <button data-r="n1000" aria-pressed="false">最新1000件</button>
+      <button data-r="h1" aria-pressed="false">1時間</button>
+      <button data-r="h24" aria-pressed="false">24時間</button>
+      <button data-r="date" aria-pressed="false">日付指定</button>
+    </div>
+    <input type="date" id="date" hidden aria-label="日付">
+    <label style="font-size:14px"><input type="checkbox" id="auto" checked> 自動更新</label>
+    <span class="grow"></span>
+    <span class="status-line num" id="status"></span>
+  </div>
+
+  <div class="latest" id="latest"></div>
+  <div class="charts" id="charts"></div>
+  <div class="empty" id="empty" hidden></div>
+</main>
+
+<!-- 送信方法 -->
+<dialog id="dlgHow">
+  <div class="dlg-head"><h2>このチャネルへデータを送る</h2><button data-close>閉じる</button></div>
+  <div class="dlg-body" id="howBody"></div>
+</dialog>
+
+<!-- writeKey 入力 -->
+<dialog id="dlgKey">
+  <form method="dialog" id="keyForm">
+    <div class="dlg-head"><h2>設定を変更するには</h2></div>
+    <div class="dlg-body">
+      <p style="margin:0">このチャネルの <b>ライトキー</b>（writeKey）を入力してください。配布されたキー一覧に書いてあります。<br><span style="font-size:14px;color:var(--muted)">このチャネルを自分のアカウントに追加していれば、<a href="login" id="keyLogin">ログイン</a>するだけで入力は不要です。</span></p>
+      <label class="f"><span>ライトキー</span><input id="keyInput" autocomplete="off" required pattern="[0-9a-fA-F]{8,64}"></label>
+    </div>
+    <div class="dlg-foot"><button value="cancel" formnovalidate>キャンセル</button><button class="primary" value="ok">設定を開く</button></div>
+  </form>
+</dialog>
+
+<!-- 設定 -->
+<dialog id="dlgSet">
+  <div class="dlg-head"><h2>チャネルの設定</h2><button data-close>閉じる</button></div>
+  <div class="dlg-body">
+    <label class="f"><span>チャネル名</span><input id="sName" maxlength="64"></label>
+    <label class="f"><span>説明</span><textarea id="sDesc" rows="2" maxlength="500"></textarea></label>
+    <label style="font-size:14px"><input type="checkbox" id="sPublic"> みんなのチャネルに公開する（オフにするとリードキーを知っている人だけが見られます）</label>
+    <div>
+      <b style="font-size:14px">データとグラフ</b>
+      <p style="margin:2px 0 8px;font-size:13px;color:var(--muted)">「グラフ」に同じ番号を付けたデータは1つのグラフに重ねて表示します。</p>
+      <div class="table-scroll"><table class="fields"><thead><tr><th>データ</th><th>表示</th><th>名前</th><th>単位</th><th>色</th><th>グラフ</th></tr></thead><tbody id="sFields"></tbody></table></div>
+    </div>
+    <div>
+      <b style="font-size:14px">キー</b>
+      <div style="display:grid;gap:6px;margin-top:6px;font-size:14px">
+        <div>ライトキー <span class="keybox" id="sWk"></span> <button id="regenW" class="danger">作り直す</button></div>
+        <div>リードキー <span class="keybox" id="sRk"></span> <button id="regenR">作り直す</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="dlg-foot">
+    <button class="danger" id="sClear" style="margin-right:auto">全データを削除</button>
+    <button data-close>キャンセル</button>
+    <button class="primary" id="sSave">設定を保存</button>
+  </div>
+</dialog>
+
+<script src="static/vendor/chart.umd.min.js"></script>
+<script src="static/common.js"></script>
+<script>
+const FIELDS = ["d1","d2","d3","d4","d5","d6","d7","d8"];
+const chId = location.pathname.split("/").pop();
+const params = new URLSearchParams(location.search);
+const readKey = params.get("readKey") || "";
+const LS_KEY = "mb_wk_" + chId;
+let ch = null, rows = [], range = "n100", charts = {}, timer = null, writeKey = "";
+try { writeKey = localStorage.getItem(LS_KEY) || ""; } catch (_) {}
+
+const rk = () => readKey ? "readKey=" + encodeURIComponent(readKey) + "&" : (writeKey ? "writeKey=" + encodeURIComponent(writeKey) + "&" : "");
+
+function shownFields() { return FIELDS.filter(f => ch.fields[f].show); }
+
+function rangeQuery() {
+  if (range === "n100") return "n=100";
+  if (range === "n1000") return "n=1000";
+  if (range === "h1" || range === "h24") {
+    const ms = range === "h1" ? 3600e3 : 86400e3;
+    return "after=" + (Date.now() - ms);
+  }
+  return "date=" + document.getElementById("date").value;
+}
+
+async function loadChannel() {
+  ch = await MB.api(`api/v2/channels/${chId}?${rk()}`);
+  document.title = ch.name + " - MiniBient";
+  document.getElementById("name").textContent = ch.name;
+  document.getElementById("cid").textContent = ch.chId;
+  document.getElementById("desc").textContent = ch.description || "";
+  document.getElementById("count").textContent = `全 ${ch.total.toLocaleString()} 件（24時間で ${ch.dataperday.toLocaleString()} 件）`;
+  document.getElementById("vis").textContent = ch.public ? "公開" : "非公開";
+  updateLast();
+}
+
+function updateLast() {
+  if (!ch) return;
+  const lp = rows.length ? rows[rows.length - 1].t : (ch.lastpost ? Date.parse(ch.lastpost) : 0);
+  document.getElementById("last").textContent = lp ? `最終受信 ${MB.fmt(lp)}（${MB.ago(lp)}）` : "まだデータがありません";
+}
+
+function toRows(list) {
+  return list.map(o => Object.assign({ t: Date.parse(o.created) }, o)).sort((a, b) => a.t - b.t);
+}
+
+async function loadData() {
+  const list = await MB.api(`api/v2/channels/${chId}/data?${rk()}${rangeQuery()}`);
+  rows = toRows(list);
+  buildCharts();
+}
+
+async function poll() {
+  if (!document.getElementById("auto").checked) return;
+  if (range === "date" && document.getElementById("date").value !== MB.today()) return;
+  try {
+    const after = rows.length ? rows[rows.length - 1].t : Date.now() - 86400e3 * 3650;
+    const list = await MB.api(`api/v2/channels/${chId}/data?${rk()}after=${after}`);
+    const add = toRows(list);
+    if (add.length) {
+      rows.push(...add);
+      if (range === "n100") rows = rows.slice(-100);
+      if (range === "n1000") rows = rows.slice(-1000);
+      if (range === "h1") rows = rows.filter(r => r.t > Date.now() - 3600e3);
+      if (range === "h24") rows = rows.filter(r => r.t > Date.now() - 86400e3);
+      updateCharts();
+    }
+    document.getElementById("status").textContent = "更新 " + MB.fmt(Date.now(), false);
+  } catch (e) {
+    document.getElementById("status").textContent = "更新できません: " + e.message;
+  }
+  updateLast();
+}
+
+function renderLatest() {
+  const last = {};
+  for (const r of rows) for (const f of FIELDS) if (r[f] !== undefined) last[f] = r[f];
+  document.getElementById("latest").innerHTML = shownFields().map(f => {
+    const fd = ch.fields[f];
+    return `<div class="v" style="border-top-color:${fd.color}"><span>${MB.esc(fd.name)}</span>
+      <b class="num">${MB.num(last[f])}</b><small>${MB.esc(fd.unit)}</small></div>`;
+  }).join("");
+}
+
+function datasetsFor(group) {
+  return group.map(f => ({
+    label: ch.fields[f].name + (ch.fields[f].unit ? ` (${ch.fields[f].unit})` : ""),
+    data: rows.filter(r => r[f] !== undefined).map(r => ({ x: r.t, y: r[f] })),
+    borderColor: ch.fields[f].color,
+    backgroundColor: ch.fields[f].color,
+    borderWidth: 2,
+    pointRadius: rows.length > (document.getElementById("charts").clientWidth || 800) / 8 ? 0 : 2,
+    pointHoverRadius: 4,
+    tension: 0,
+  }));
+}
+
+function groups() {
+  const g = {};
+  for (const f of shownFields()) (g[ch.fields[f].chart] = g[ch.fields[f].chart] || []).push(f);
+  return Object.keys(g).sort((a, b) => a - b).map(k => g[k]);
+}
+
+function buildCharts() {
+  Object.values(charts).forEach(c => c.chart.destroy());
+  charts = {};
+  const box = document.getElementById("charts");
+  box.innerHTML = "";
+  const empty = document.getElementById("empty");
+  renderLatest();
+  if (!rows.length) {
+    empty.hidden = false;
+    empty.innerHTML = range === "date" || range.startsWith("h")
+      ? "<strong>この範囲にはデータがありません</strong>表示範囲を変えてみてください。"
+      : `<strong>まだデータが届いていません</strong>M5StickC からこのチャネル（ID ${ch.chId}）に送信すると、ここにグラフが表示されます。<br><button id="emptyHow" style="margin-top:12px">送信方法を見る</button>`;
+    const b = document.getElementById("emptyHow");
+    if (b) b.onclick = showHow;
+    return;
+  }
+  empty.hidden = true;
+  const span = rows[rows.length - 1].t - rows[0].t;
+  groups().forEach((group, i) => {
+    const el = document.createElement("div");
+    el.className = "chart-box";
+    el.innerHTML = `<h3>${group.map(f => MB.esc(ch.fields[f].name)).join(" / ")}</h3><div class="chart-wrap"><canvas></canvas></div>`;
+    box.appendChild(el);
+    const chart = new Chart(el.querySelector("canvas"), {
+      type: "line",
+      data: { datasets: datasetsFor(group) },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false, parsing: false, spanGaps: true,
+        interaction: { mode: "nearest", axis: "x", intersect: false },
+        scales: {
+          x: { type: "linear", min: rows[0].t, max: rows[rows.length - 1].t, ticks: { maxTicksLimit: 8, callback: v => tickLabel(v, span) }, grid: { color: "#eef2f6" } },
+          y: { grid: { color: "#eef2f6" }, ticks: { callback: v => MB.num(v) } },
+        },
+        plugins: {
+          legend: { display: group.length > 1, position: "bottom", labels: { boxWidth: 12 } },
+          tooltip: { callbacks: { title: items => MB.fmt(items[0].parsed.x), label: it => `${it.dataset.label}: ${MB.num(it.parsed.y)}` } },
+        },
+      },
+    });
+    charts[i] = { chart, group };
+  });
+}
+
+function tickLabel(v, span) {
+  const t = MB.parts(v);
+  if (span > 86400e3) return `${t.M}/${t.d} ${t.h}:${t.m}`;
+  if (span > 3600e3) return `${t.h}:${t.m}`;
+  return `${t.h}:${t.m}:${t.s}`;
+}
+
+function updateCharts() {
+  renderLatest();
+  if (!Object.keys(charts).length || document.getElementById("empty").hidden === false) return buildCharts();
+  for (const { chart, group } of Object.values(charts)) {
+    const ds = datasetsFor(group);
+    chart.data.datasets.forEach((d, i) => { d.data = ds[i].data; d.pointRadius = ds[i].pointRadius; });
+    chart.options.scales.x.min = rows[0].t;
+    chart.options.scales.x.max = rows[rows.length - 1].t;
+    chart.update("none");
+  }
+}
+
+// --- 送信方法
+function showHow() {
+  const { host, port, base, url, https, httpUrl } = MB.target();
+  const canSeeKey = !!writeKey;
+  const wk = canSeeKey ? writeKey : "（配布されたライトキー）";
+  const fields = shownFields().length ? shownFields() : ["d1"];
+  const minSec = Math.ceil((MB.info && MB.info.minInterval) || 0);
+  const sec = minSec ? Math.max(30, minSec + 5) : 10;  // 制限ちょうどだと通信の遅れではじかれるので余裕を持たせる
+  const beginArgs = `${ch.chId}, "${MB.esc(wk)}", &amp;client, "${MB.esc(host)}", ${port}${base ? `, "${MB.esc(base)}"` : ""}`;
+  document.getElementById("howBody").innerHTML = `
+    <p style="margin:0">送り方は <a href="https://ambidata.io/" target="_blank" rel="noopener">Ambient</a> と同じです。接続先だけをこのサーバーに変えます。</p>
+    <div class="ch-meta num" style="font-size:15px">
+      <span>サーバー <span class="keybox">${MB.esc(host)}</span></span>
+      <span>ポート <span class="keybox">${port}</span></span>
+      ${base ? `<span>フォルダー <span class="keybox">${MB.esc(base)}</span></span>` : ""}
+      <span>チャネルID <span class="keybox">${ch.chId}</span></span>
+      <span>ライトキー <span class="keybox">${MB.esc(wk)}</span></span>
+    </div>
+    ${minSec ? `<p style="margin:0;font-size:14px">このサーバーは、前回の受信から <b>${minSec}秒</b> たたないうちに届いた送信を受け付けません（エラー 429）。</p>` : ""}
+    ${https ? `<p style="margin:0;font-size:14px;color:var(--muted)">https（暗号化）で送る例です。http（ポート80、<code>${MB.esc(httpUrl)}</code>）で送ることもできます。</p>` : ""}
+    <div><b>Arduino（AmbientLite ライブラリ）</b>
+<pre class="code">#include &lt;WiFi.h&gt;
+${https ? "#include &lt;WiFiClientSecure.h&gt;\n" : ""}#include "AmbientLite.h"
+
+${https ? "WiFiClientSecure client;   // https で送るとき" : "WiFiClient client;"}
+AmbientLite ambient;
+
+void setup() {
+  // …WiFi 接続のあと
+${https ? "  client.setInsecure();      // 証明書の確認を省略（暗号化はされます）\n" : ""}  ambient.begin(${beginArgs});
+}
+
+void loop() {
+${fields.map((f, i) => `  ambient.set(${f.slice(1)}, value${i + 1});   // ${MB.esc(ch.fields[f].name)}`).join("\n")}
+  ambient.send();
+  delay(${sec * 1000});   // ${sec}秒ごと${minSec ? `（${minSec}秒より短い間隔の送信は受け付けられません）` : ""}
+}</pre></div>
+    <div><b>UIFlow / MicroPython</b>
+<pre class="code">import urequests
+urequests.post("${MB.esc(url)}/api/v2/channels/${ch.chId}/data",
+    json={"writeKey": "${MB.esc(wk)}", "d1": 23.5}).close()</pre></div>
+    <div><b>パソコンから試す（curl）</b> <a href="guide?ch=${ch.chId}" style="font-size:14px">Windows の書き方や送り続ける方法</a>
+<pre class="code">curl -X POST ${MB.esc(url)}/api/v2/channels/${ch.chId}/data \\
+  -H "Content-Type: application/json" \\
+  -d '{"writeKey":"${MB.esc(wk)}","d1":23.5,"d2":60}'</pre></div>`;
+  document.getElementById("dlgHow").showModal();
+}
+
+// --- 設定
+function isOwner() {
+  const u = MB.user();
+  return !!(u && ch && ch.ownerId === u.id);
+}
+
+async function openSettings() {
+  if (!writeKey && !MB.adminPw() && !isOwner()) return askKey();
+  try {
+    const full = await MB.api(`api/ui/channels/${chId}/verify`, { method: "POST", body: { writeKey } });
+    if (!ch) { location.reload(); return; }  // 非公開チャネルをライトキーで開いた場合
+    fillSettings(full);
+    document.getElementById("dlgSet").showModal();
+  } catch (e) {
+    if (e.status === 403) { setWriteKey(""); MB.toast("ライトキーが違います", true); askKey(); }
+    else MB.toast(e.message, true);
+  }
+}
+function setWriteKey(v) {
+  writeKey = v;
+  try { v ? localStorage.setItem(LS_KEY, v) : localStorage.removeItem(LS_KEY); } catch (_) {}
+}
+function askKey() {
+  const d = document.getElementById("dlgKey");
+  document.getElementById("keyInput").value = "";
+  d.showModal();
+  d.onclose = () => {
+    if (d.returnValue === "ok") { setWriteKey(document.getElementById("keyInput").value.trim()); openSettings(); }
+  };
+}
+function fillSettings(full) {
+  document.getElementById("sName").value = full.name;
+  document.getElementById("sDesc").value = full.description;
+  document.getElementById("sPublic").checked = full.public;
+  document.getElementById("sWk").textContent = full.writeKey;
+  document.getElementById("sRk").textContent = full.readKey;
+  document.getElementById("sFields").innerHTML = FIELDS.map(f => {
+    const v = full.fields[f];
+    return `<tr data-f="${f}"><td>${f}</td>
+      <td><input type="checkbox" data-k="show" ${v.show ? "checked" : ""} aria-label="${f} を表示"></td>
+      <td><input type="text" data-k="name" value="${MB.esc(v.name)}" maxlength="32" aria-label="${f} の名前"></td>
+      <td><input type="text" data-k="unit" value="${MB.esc(v.unit)}" maxlength="16" style="width:70px" aria-label="${f} の単位"></td>
+      <td><input type="color" data-k="color" value="${v.color}" aria-label="${f} の色"></td>
+      <td><select data-k="chart" aria-label="${f} のグラフ番号">${[1,2,3,4,5,6,7,8].map(n => `<option ${n == v.chart ? "selected" : ""}>${n}</option>`).join("")}</select></td></tr>`;
+  }).join("");
+}
+async function saveSettings() {
+  const fields = {};
+  document.querySelectorAll("#sFields tr").forEach(tr => {
+    const o = {};
+    tr.querySelectorAll("[data-k]").forEach(el => o[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value);
+    fields[tr.dataset.f] = o;
+  });
+  try {
+    await MB.api(`api/ui/channels/${chId}`, { method: "PUT", body: {
+      writeKey, name: document.getElementById("sName").value, description: document.getElementById("sDesc").value,
+      public: document.getElementById("sPublic").checked, fields } });
+    document.getElementById("dlgSet").close();
+    MB.toast("設定を保存しました");
+    await loadChannel();
+    buildCharts();
+  } catch (e) { MB.toast(e.message, true); }
+}
+async function regen(which) {
+  const msg = which === "write"
+    ? "ライトキーを作り直すと、今のキーで送信しているM5StickCからは送れなくなります。作り直しますか？"
+    : "リードキーを作り直すと、今のリードキーで見ていた人は見られなくなります。作り直しますか？";
+  if (!confirm(msg)) return;
+  try {
+    const full = await MB.api(`api/ui/channels/${chId}/regenerate`, { method: "POST", body: { writeKey, which } });
+    if (which === "write" && writeKey) setWriteKey(full.writeKey);
+    fillSettings(full);
+    MB.toast("キーを作り直しました");
+  } catch (e) { MB.toast(e.message, true); }
+}
+async function clearData() {
+  if (!confirm(`チャネル「${ch.name}」のデータ ${ch.total} 件をすべて削除します。元に戻せません。削除しますか？`)) return;
+  try {
+    const r = await MB.api(`api/v2/channels/${chId}/data?writeKey=${encodeURIComponent(writeKey)}`, { method: "DELETE" });
+    MB.toast(`${r.deleted} 件を削除しました`);
+    document.getElementById("dlgSet").close();
+    await loadChannel(); await loadData();
+  } catch (e) { MB.toast(e.message, true); }
+}
+
+// --- events
+document.querySelectorAll("#ranges button").forEach(b => b.addEventListener("click", async () => {
+  range = b.dataset.r;
+  document.querySelectorAll("#ranges button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  const di = document.getElementById("date");
+  di.hidden = range !== "date";
+  if (range === "date" && !di.value) di.value = MB.today();
+  await loadData().catch(e => MB.toast(e.message, true));
+}));
+document.getElementById("date").addEventListener("change", () => loadData().catch(e => MB.toast(e.message, true)));
+document.getElementById("btnHow").onclick = showHow;
+document.getElementById("btnSettings").onclick = openSettings;
+document.getElementById("btnCsv").onclick = () => { location.href = `api/ui/channels/${chId}/csv?${rk()}${range.startsWith("n") ? "n=100000" : rangeQuery()}`; };
+document.getElementById("sSave").onclick = saveSettings;
+document.getElementById("regenW").onclick = () => regen("write");
+document.getElementById("regenR").onclick = () => regen("read");
+document.getElementById("sClear").onclick = clearData;
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.closest("dialog").close());
+
+(async () => {
+  await MB.loadInfo();
+  MB.header("");
+  document.getElementById("keyLogin").href = "login?next=ch/" + chId;
+  Chart.defaults.font.family = getComputedStyle(document.documentElement).fontFamily;
+  Chart.defaults.color = "#5b6b80";
+  try {
+    await loadChannel();
+    if (isOwner()) {
+      // 持ち主ならキーを取得しておく（送信方法の表示用。保存はしない）
+      try { const full = await MB.api(`api/ui/channels/${chId}/verify`, { method: "POST", body: {} }); writeKey = full.writeKey; } catch (_) {}
+      document.getElementById("vis").textContent += " ・ あなたのチャネル";
+    }
+    await loadData();
+    if (new URLSearchParams(location.search).get("how")) showHow();
+  } catch (e) {
+    document.getElementById("name").textContent = e.status === 404 ? "チャネルが見つかりません" : "表示できません";
+    const empty = document.getElementById("empty");
+    empty.hidden = false;
+    empty.innerHTML = e.status === 403
+      ? `<strong>非公開のチャネルです</strong>アドレスの末尾に <code>?readKey=リードキー</code> を付けて開いてください。持ち主の方は <a href="login?next=ch/${chId}">ログイン</a> すると見られます。`
+      : `<strong>${MB.esc(e.message)}</strong><a href="./">みんなのチャネルに戻る</a>`;
+    return;
+  }
+  timer = setInterval(poll, 5000);
+})();
+</script>
+</body>
+</html>

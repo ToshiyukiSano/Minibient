@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ログイン - MiniBient</title>
+<link rel="icon" href="static/favicon.svg">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<main style="max-width:480px">
+  <div class="seg" role="tablist" aria-label="ログインと登録" style="margin-bottom:16px" id="tabs">
+    <button role="tab" data-tab="login" aria-pressed="true">ログイン</button>
+    <button role="tab" data-tab="register" aria-pressed="false">はじめての方（ユーザー登録）</button>
+  </div>
+
+  <form class="sheet" id="loginForm">
+    <h1 style="font-size:22px;margin-bottom:12px">ログイン</h1>
+    <div style="display:grid;gap:12px">
+      <label class="f"><span>ユーザー名</span><input id="lUser" autocomplete="username" required autocapitalize="off"></label>
+      <label class="f"><span>パスワード</span><input id="lPass" type="password" autocomplete="current-password" required></label>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="primary">ログイン</button></div>
+    <p class="status-line" style="margin:14px 0 0">パスワードを忘れたときは、講師に仮パスワードの発行を頼んでください。</p>
+  </form>
+
+  <form class="sheet" id="regForm" hidden>
+    <h1 style="font-size:22px;margin-bottom:12px">ユーザー登録</h1>
+    <div style="display:grid;gap:12px">
+      <label class="f" id="inviteRow"><span>招待コード</span><input id="rInvite" autocomplete="off" autocapitalize="off" required>講座で配られた8文字のコードです。</label>
+      <label class="f"><span>ユーザー名</span><input id="rUser" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{3,32}" autocapitalize="off">半角英数字（と _ - .）で3〜32文字。ログインに使います。</label>
+      <label class="f"><span>表示名（なくてもOK）</span><input id="rName" maxlength="32" placeholder="例：さとう"></label>
+      <label class="f"><span>パスワード</span><input id="rPass" type="password" autocomplete="new-password" required minlength="8">8文字以上</label>
+      <label class="f"><span>パスワード（確認）</span><input id="rPass2" type="password" autocomplete="new-password" required minlength="8"></label>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="primary">登録する</button></div>
+  </form>
+
+  <div class="sheet" id="closed" hidden>
+    <p style="margin:0">現在、新しいユーザー登録は受け付けていません。講師に問い合わせてください。</p>
+  </div>
+</main>
+<script src="static/common.js"></script>
+<script>
+function showTab(t) {
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.tab === t));
+  const closed = MB.info && MB.info.registration === "closed";
+  document.getElementById("loginForm").hidden = t !== "login";
+  document.getElementById("regForm").hidden = t !== "register" || closed;
+  document.getElementById("closed").hidden = !(t === "register" && closed);
+}
+function next() {
+  const n = new URLSearchParams(location.search).get("next");
+  location.href = n && /^[a-z0-9\/]*$/i.test(n) ? n : "me";
+}
+
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+document.getElementById("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  try {
+    await MB.api("api/auth/login", { method: "POST", body: {
+      username: document.getElementById("lUser").value.trim(), password: document.getElementById("lPass").value } });
+    next();
+  } catch (err) { MB.toast(err.message, true); }
+});
+
+document.getElementById("regForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const p1 = document.getElementById("rPass").value, p2 = document.getElementById("rPass2").value;
+  if (p1 !== p2) return MB.toast("パスワード（確認）が一致しません", true);
+  try {
+    await MB.api("api/auth/register", { method: "POST", body: {
+      inviteCode: document.getElementById("rInvite").value.trim(),
+      username: document.getElementById("rUser").value.trim(),
+      displayName: document.getElementById("rName").value.trim(), password: p1 } });
+    location.href = "me?welcome=1";
+  } catch (err) { MB.toast(err.message, true); }
+});
+
+(async () => {
+  await MB.loadInfo();
+  MB.header("login");
+  if (MB.info && MB.info.user) return next();
+  if (MB.info && MB.info.registration === "open") {
+    document.getElementById("inviteRow").hidden = true;
+    document.getElementById("rInvite").required = false;
+  }
+  const q = new URLSearchParams(location.search);
+  if (q.get("invite")) document.getElementById("rInvite").value = q.get("invite");
+  showTab(q.get("tab") === "register" || q.get("invite") ? "register" : "login");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>マイページ - MiniBient</title>
+<link rel="icon" href="static/favicon.svg">
+<link rel="stylesheet" href="static/style.css">
+<style>
+  .mych { display: grid; gap: 12px; }
+  .mych .sheet { display: grid; gap: 10px; }
+  .mych-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .mych-head h3 { margin: 0; font-size: 18px; }
+  .keys { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 14px; }
+  .keys .keybox { font-size: 15px; justify-self: start; }
+  .notice { border-left: 6px solid var(--signal); background: var(--signal-soft); padding: 12px 16px; border-radius: var(--radius-s); margin-bottom: 16px; }
+  .notice.warn { border-left-color: var(--warn); background: #fdf3e7; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+</style>
+</head>
+<body>
+<main style="max-width:960px">
+  <div class="ch-head">
+    <div class="grow">
+      <h1 id="hello">マイページ</h1>
+      <p class="lead" style="margin:0">あなたのチャネルと、M5StickC に書き込むキーの一覧です。</p>
+    </div>
+    <div class="row"><button id="btnLogout">ログアウト</button></div>
+  </div>
+
+  <div id="notices"></div>
+
+  <h2>あなたのチャネル</h2>
+  <div class="mych" id="list"></div>
+
+  <h2>チャネルを増やす</h2>
+  <div class="cols">
+    <form class="sheet" id="createForm">
+      <b>新しく作る</b>
+      <label class="f" style="margin-top:8px"><span>チャネル名</span><input id="cName" maxlength="64" placeholder="例：加速度センサー"></label>
+      <div class="row" style="margin-top:12px"><button class="primary" id="cBtn">チャネルを作る</button></div>
+      <p class="status-line" id="cLimit" style="margin:8px 0 0"></p>
+    </form>
+    <form class="sheet" id="claimForm">
+      <b>配られたキーカードのチャネルを追加する</b>
+      <div class="row" style="margin-top:8px">
+        <label class="f"><span>チャネルID</span><input id="aId" inputmode="numeric" required style="width:120px"></label>
+        <label class="f" style="flex:1"><span>ライトキー</span><input id="aKey" required autocomplete="off" autocapitalize="off"></label>
+      </div>
+      <div class="row" style="margin-top:12px"><button>追加する</button></div>
+    </form>
+  </div>
+
+  <h2>パスワードの変更</h2>
+  <form class="sheet" id="pwForm" style="max-width:480px">
+    <div style="display:grid;gap:12px">
+      <label class="f"><span>今のパスワード</span><input id="pCur" type="password" autocomplete="current-password" required></label>
+      <label class="f"><span>新しいパスワード</span><input id="pNew" type="password" autocomplete="new-password" required minlength="8">8文字以上</label>
+      <label class="f"><span>新しいパスワード（確認）</span><input id="pNew2" type="password" autocomplete="new-password" required minlength="8"></label>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="primary">パスワードを変更</button></div>
+  </form>
+</main>
+
+<script src="static/common.js"></script>
+<script>
+let me = null;
+
+function chCard(c) {
+  const lp = c.lastpost ? Date.parse(c.lastpost) : 0;
+  const { host, port, base, https } = MB.target();
+  return `<div class="sheet">
+    <div class="mych-head"><h3>${MB.esc(c.name)}</h3>
+      <span class="status-line num"><span class="${MB.freshness(lp)}"><span class="dot"></span></span>${lp ? "最終受信 " + MB.ago(lp) : "まだデータがありません"} ・ ${c.total.toLocaleString()} 件 ・ ${c.public ? "公開" : "非公開"}</span></div>
+    <div class="keys num">
+      <span>チャネルID</span><span class="keybox">${c.chId}</span><button data-copy="${c.chId}">コピー</button>
+      <span>ライトキー</span><span class="keybox">${c.writeKey}</span><button data-copy="${c.writeKey}">コピー</button>
+      <span>リードキー</span><span class="keybox">${c.readKey}</span><button data-copy="${c.readKey}">コピー</button>
+    </div>
+    <div class="status-line">送信先：サーバー <b>${MB.esc(host)}</b> ・ ポート <b>${port}</b>${https ? "（https）" : ""}${base ? ` ・ フォルダー <b>${MB.esc(base)}</b>` : ""}</div>
+    <div class="row"><a class="btn" href="ch/${c.chId}">グラフと設定</a><a class="btn" href="ch/${c.chId}?how=1">送信方法（プログラム例）</a><a class="btn" href="guide?ch=${c.chId}">curl で試す</a>
+      <span style="flex:1"></span><button class="danger" data-del="${c.chId}">削除</button></div>
+  </div>`;
+}
+
+function render() {
+  document.getElementById("hello").textContent = `${me.user.displayName} さんのマイページ`;
+  const n = [];
+  const q = new URLSearchParams(location.search);
+  if (q.get("welcome")) n.push(`<div class="notice"><b>登録できました。</b> 下の「チャネルを増やす」から、新しくチャネルを作るか、配られたキーカードのチャネル（チャネルIDとライトキー）を追加してください。</div>`);
+  if (me.user.mustChangePassword) n.push(`<div class="notice warn"><b>仮パスワードでログインしています。</b> ページ下の「パスワードの変更」で、自分のパスワードに変えてください。</div>`);
+  document.getElementById("notices").innerHTML = n.join("");
+  const list = document.getElementById("list");
+  list.innerHTML = me.channels.length ? me.channels.map(chCard).join("")
+    : `<div class="sheet empty"><strong>まだチャネルがありません</strong>下のフォームから作るか、配られたキーカードのチャネルを追加してください。</div>`;
+  list.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => MB.copy(b.dataset.copy));
+  list.querySelectorAll("[data-del]").forEach(b => b.onclick = () => del(b.dataset.del));
+  const full = me.channels.length >= me.maxChannels;
+  document.getElementById("cBtn").disabled = full;
+  document.getElementById("cLimit").textContent = `チャネルは1人 ${me.maxChannels} 個まで作れます（いま ${me.channels.length} 個）`;
+}
+
+async function load() {
+  try { me = await MB.api("api/auth/me"); render(); }
+  catch (e) {
+    if (e.status === 401) location.href = "login?next=me";
+    else MB.toast(e.message, true);
+  }
+}
+
+async function del(id) {
+  const c = me.channels.find(x => x.chId == id);
+  if (!confirm(`チャネル「${c.name}」とデータ ${c.total} 件を削除します。M5StickC からこのチャネルには送れなくなります。元に戻せません。削除しますか？`)) return;
+  try { await MB.api(`api/me/channels/${id}`, { method: "DELETE" }); MB.toast("削除しました"); load(); }
+  catch (e) { MB.toast(e.message, true); }
+}
+
+document.getElementById("createForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  try {
+    const c = await MB.api("api/me/channels", { method: "POST", body: { name: document.getElementById("cName").value.trim() } });
+    document.getElementById("cName").value = "";
+    MB.toast(`チャネル ${c.chId} を作りました`);
+    load();
+  } catch (err) { MB.toast(err.message, true); }
+});
+
+document.getElementById("claimForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  try {
+    const c = await MB.api("api/me/claim", { method: "POST", body: {
+      channelId: document.getElementById("aId").value.trim(), writeKey: document.getElementById("aKey").value.trim() } });
+    document.getElementById("aId").value = document.getElementById("aKey").value = "";
+    MB.toast(`「${c.name}」を追加しました`);
+    load();
+  } catch (err) { MB.toast(err.message, true); }
+});
+
+document.getElementById("pwForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const n1 = document.getElementById("pNew").value, n2 = document.getElementById("pNew2").value;
+  if (n1 !== n2) return MB.toast("新しいパスワード（確認）が一致しません", true);
+  try {
+    await MB.api("api/auth/password", { method: "POST", body: { current: document.getElementById("pCur").value, new: n1 } });
+    e.target.reset();
+    MB.toast("パスワードを変更しました");
+    load();
+  } catch (err) { MB.toast(err.message, true); }
+});
+
+document.getElementById("btnLogout").onclick = MB.logout;
+
+(async () => {
+  await MB.loadInfo();
+  MB.header("me");
+  await load();
+})();
+</script>
+</body>
+</html>

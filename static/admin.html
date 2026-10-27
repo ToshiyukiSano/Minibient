@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理 - MiniBient</title>
+<link rel="icon" href="static/favicon.svg">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<main>
+  <h1>管理</h1>
+  <p class="lead">講座の準備：受講者に招待コードを伝えてユーザー登録してもらうか、チャネルをまとめて作ってキーカードを配ります。</p>
+
+  <form class="sheet" id="login" style="max-width:420px">
+    <label class="f"><span>管理パスワード</span>
+      <input type="password" id="pw" autocomplete="current-password" required>
+      サーバーを起動したときの画面か、<code>admin_password.txt</code> に書いてあります。</label>
+    <div class="row" style="margin-top:12px"><button class="primary">ログイン</button></div>
+  </form>
+
+  <div id="panel" hidden>
+    <h2 style="margin-top:0">ユーザー登録</h2>
+    <div class="sheet" id="regBox"></div>
+
+    <h2>ユーザー一覧</h2>
+    <div class="table-scroll">
+      <table class="list">
+        <thead><tr><th>ユーザー名</th><th>表示名</th><th>チャネル</th><th>登録日</th><th>最終ログイン</th><th></th></tr></thead>
+        <tbody id="users"></tbody>
+      </table>
+    </div>
+
+    <h2>チャネルをまとめて作る</h2>
+    <form class="sheet" id="create">
+      <div class="row">
+        <label class="f"><span>名前</span><input id="cPrefix" value="受講者" style="width:160px"></label>
+        <label class="f"><span>開始番号</span><input id="cStart" type="number" value="1" min="0" style="width:90px"></label>
+        <label class="f"><span>作る数</span><input id="cCount" type="number" value="20" min="1" max="200" style="width:90px"></label>
+        <label style="font-size:14px;padding-bottom:8px"><input type="checkbox" id="cPublic" checked> みんなのチャネルに公開</label>
+      </div>
+      <p id="cPreview" class="status-line" style="margin:8px 0 0"></p>
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:14px">データの名前と単位をあらかじめ決めておく（講座で送るデータが決まっている場合）</summary>
+        <div class="table-scroll" style="margin-top:8px"><table class="fields"><thead><tr><th>データ</th><th>表示</th><th>名前</th><th>単位</th><th>グラフ</th></tr></thead><tbody id="cFields"></tbody></table></div>
+        <div class="row" style="margin-top:8px">
+          <button type="button" data-preset="imu">例：加速度 X/Y/Z を1つのグラフに</button>
+          <button type="button" data-preset="env">例：温度・湿度・気圧</button>
+        </div>
+      </details>
+      <div class="row" style="margin-top:14px"><button class="primary" id="cBtn">チャネルを作る</button></div>
+    </form>
+
+    <h2>チャネル一覧</h2>
+    <div class="toolbar">
+      <span class="status-line" id="lstat"></span>
+      <span class="grow"></span>
+      <button id="btnPrint">キーカードを印刷</button>
+      <button id="btnCsv">キー一覧 CSV</button>
+      <button id="btnLogout">ログアウト</button>
+    </div>
+    <div class="table-scroll">
+      <table class="list">
+        <thead><tr><th>ID</th><th>名前</th><th>持ち主</th><th>ライトキー</th><th>リードキー</th><th>件数</th><th>最終受信</th><th>公開</th><th></th></tr></thead>
+        <tbody id="list"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<div class="cards" id="cards"></div>
+
+<script src="static/common.js"></script>
+<script>
+const FIELDS = ["d1","d2","d3","d4","d5","d6","d7","d8"];
+let channels = [];
+
+function fieldRows(preset = {}) {
+  document.getElementById("cFields").innerHTML = FIELDS.map((f, i) => {
+    const p = preset[f] || {};
+    return `<tr data-f="${f}"><td>${f}</td>
+      <td><input type="checkbox" data-k="show" ${p.show ?? i === 0 ? "checked" : ""}></td>
+      <td><input type="text" data-k="name" value="${MB.esc(p.name || "")}" placeholder="${f}"></td>
+      <td><input type="text" data-k="unit" value="${MB.esc(p.unit || "")}" style="width:70px"></td>
+      <td><select data-k="chart">${[1,2,3,4,5,6,7,8].map(n => `<option ${n == (p.chart || i + 1) ? "selected" : ""}>${n}</option>`).join("")}</select></td></tr>`;
+  }).join("");
+}
+const PRESETS = {
+  imu: { d1: { name: "加速度X", unit: "G", show: true, chart: 1 }, d2: { name: "加速度Y", unit: "G", show: true, chart: 1 },
+         d3: { name: "加速度Z", unit: "G", show: true, chart: 1 }, d4: { name: "バッテリー", unit: "V", show: true, chart: 2 } },
+  env: { d1: { name: "温度", unit: "℃", show: true, chart: 1 }, d2: { name: "湿度", unit: "%", show: true, chart: 2 },
+         d3: { name: "気圧", unit: "hPa", show: true, chart: 3 } },
+};
+
+function preview() {
+  const p = document.getElementById("cPrefix").value, s = +document.getElementById("cStart").value || 0,
+        n = +document.getElementById("cCount").value || 1, w = Math.max(2, String(s + n - 1).length);
+  const name = i => p + String(s + i).padStart(w, "0");
+  document.getElementById("cPreview").textContent = `「${name(0)}」〜「${name(n - 1)}」の ${n} チャネルを作ります`;
+}
+
+async function load() {
+  channels = await MB.api("api/admin/channels");
+  const tb = document.getElementById("list");
+  tb.innerHTML = channels.map(c => `<tr>
+    <td class="num"><a href="ch/${c.chId}">${c.chId}</a></td>
+    <td>${MB.esc(c.name)}</td>
+    <td>${c.ownerName ? MB.esc(c.ownerName) : '<span class="status-line">なし</span>'} <button data-owner="${c.chId}" title="持ち主を変更">変更</button></td>
+    <td><span class="keybox">${c.writeKey}</span></td>
+    <td><span class="keybox">${c.readKey}</span></td>
+    <td class="num">${c.total.toLocaleString()}</td>
+    <td class="num">${c.lastpost ? MB.ago(Date.parse(c.lastpost)) : "—"}</td>
+    <td>${c.public ? "公開" : "非公開"}</td>
+    <td><button class="danger" data-del="${c.chId}">削除</button></td></tr>`).join("")
+    || `<tr><td colspan="9" class="empty">まだチャネルがありません。上のフォームから作ってください。</td></tr>`;
+  document.getElementById("lstat").textContent = `${channels.length} チャネル`;
+  tb.querySelectorAll("[data-del]").forEach(b => b.onclick = () => del(b.dataset.del));
+  tb.querySelectorAll("[data-owner]").forEach(b => b.onclick = () => changeOwner(b.dataset.owner));
+  loadUsers();
+  loadSettings();
+}
+
+const REG_LABEL = { invite: "招待コードを知っている人だけ登録できます", open: "誰でも登録できます", closed: "新しい登録は受け付けていません" };
+
+async function loadSettings() {
+  const st = await MB.api("api/admin/settings");
+  const link = new URL("login?invite=" + encodeURIComponent(st.inviteCode), document.baseURI).href;
+  document.getElementById("regBox").innerHTML = `
+    <p style="margin:0 0 10px">現在の設定：<b>${REG_LABEL[st.registration]}</b>（1人 ${st.maxChannels} チャネルまで・送信は ${st.minInterval} 秒以上の間隔）</p>
+    ${st.registration === "invite" ? `
+    <div class="row" style="align-items:center">
+      <span>招待コード</span><span class="keybox" style="font-size:22px;letter-spacing:.08em">${MB.esc(st.inviteCode)}</span>
+      <button id="copyCode">コピー</button>
+      <button id="copyLink">登録用リンクをコピー</button>
+      ${st.inviteFixed ? "" : '<button id="newCode" class="danger">作り直す</button>'}
+    </div>
+    <p class="status-line" style="margin:8px 0 0">受講者は「ログイン / 登録」→「はじめての方」で、このコードを入れて登録します。登録用リンクを開くとコードが入力済みになります。全員の登録が済んだら作り直すと、それ以降の登録を止められます（登録済みの人はそのまま使えます）。</p>` : ""}
+    <p class="status-line" style="margin:8px 0 0">登録の受付方法（招待制・誰でも・停止）は、レンタルサーバー版は index.cgi の REGISTRATION、常駐版は起動オプション --registration で変えられます。</p>`;
+  const cc = document.getElementById("copyCode"); if (cc) cc.onclick = () => MB.copy(st.inviteCode);
+  const cl = document.getElementById("copyLink"); if (cl) cl.onclick = () => MB.copy(link);
+  const nc = document.getElementById("newCode"); if (nc) nc.onclick = async () => {
+    if (!confirm("招待コードを作り直します。今のコードでは登録できなくなります（登録済みのユーザーには影響しません）。作り直しますか？")) return;
+    try { await MB.api("api/admin/invite", { method: "POST", body: {} }); MB.toast("招待コードを作り直しました"); loadSettings(); }
+    catch (e) { MB.toast(e.message, true); }
+  };
+}
+
+let users = [];
+async function loadUsers() {
+  users = await MB.api("api/admin/users");
+  const tb = document.getElementById("users");
+  tb.innerHTML = users.map(u => `<tr>
+    <td>${MB.esc(u.username)}${u.mustChangePassword ? ' <span class="status-line">（仮パスワード）</span>' : ""}</td>
+    <td>${MB.esc(u.displayName)}</td>
+    <td class="num">${u.channels}</td>
+    <td class="num">${MB.fmt(Date.parse(u.created)).slice(0, 10)}</td>
+    <td class="num">${u.lastLogin ? MB.ago(Date.parse(u.lastLogin)) : "—"}</td>
+    <td><button data-reset="${u.id}">仮パスワード発行</button> <button class="danger" data-udel="${u.id}">削除</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="empty">まだ登録したユーザーはいません。</td></tr>`;
+  tb.querySelectorAll("[data-reset]").forEach(b => b.onclick = () => resetPw(b.dataset.reset));
+  tb.querySelectorAll("[data-udel]").forEach(b => b.onclick = () => delUser(b.dataset.udel));
+}
+
+async function resetPw(id) {
+  const u = users.find(x => x.id == id);
+  if (!confirm(`${u.username} さんの仮パスワードを発行します。今のパスワードは使えなくなり、ログイン中の端末もログアウトされます。発行しますか？`)) return;
+  try {
+    const r = await MB.api(`api/admin/users/${id}/reset`, { method: "POST", body: {} });
+    prompt(`${r.username} さんの仮パスワードです。本人に伝えてください（ログイン後にパスワードの変更を求められます）`, r.tempPassword);
+    loadUsers();
+  } catch (e) { MB.toast(e.message, true); }
+}
+
+async function delUser(id) {
+  const u = users.find(x => x.id == id);
+  if (!confirm(`ユーザー ${u.username} を削除します。持っていたチャネル（${u.channels}個）とデータは残り、持ち主なしになります。削除しますか？`)) return;
+  try { await MB.api(`api/admin/users/${id}`, { method: "DELETE" }); MB.toast("削除しました"); load(); }
+  catch (e) { MB.toast(e.message, true); }
+}
+
+async function changeOwner(id) {
+  const c = channels.find(x => x.chId == id);
+  const name = prompt(`チャネル ${id}「${c.name}」の持ち主のユーザー名を入力してください（空にすると持ち主なし）`, c.ownerName || "");
+  if (name === null) return;
+  try { await MB.api(`api/admin/channels/${id}/owner`, { method: "PUT", body: { username: name.trim() } }); MB.toast("持ち主を変更しました"); load(); }
+  catch (e) { MB.toast(e.message, true); }
+}
+
+async function del(id) {
+  const c = channels.find(x => x.chId == id);
+  if (!confirm(`チャネル ${id}「${c.name}」とそのデータ ${c.total} 件を削除します。元に戻せません。削除しますか？`)) return;
+  try { await MB.api(`api/admin/channels/${id}`, { method: "DELETE" }); MB.toast("削除しました"); load(); }
+  catch (e) { MB.toast(e.message, true); }
+}
+
+function printCards() {
+  if (!channels.length) return MB.toast("印刷するチャネルがありません", true);
+  const { host, port, base, https } = MB.target();
+  document.getElementById("cards").innerHTML = channels.map(c => `<div class="card">
+    <h3>${MB.esc(c.name)}</h3>
+    <dl><dt>サーバー</dt><dd>${MB.esc(host)}</dd><dt>ポート</dt><dd>${port}${https ? "（https）" : ""}</dd>${base ? `<dt>フォルダー</dt><dd>${MB.esc(base)}</dd>` : ""}
+      <dt>チャネルID</dt><dd>${c.chId}</dd><dt>ライトキー</dt><dd>${c.writeKey}</dd>
+      <dt>グラフ</dt><dd style="font-size:10pt">${MB.esc(new URL("ch/" + c.chId, document.baseURI).href)}</dd></dl></div>`).join("");
+  document.body.classList.add("print-cards");
+  window.print();
+  setTimeout(() => document.body.classList.remove("print-cards"), 500);
+}
+
+function showPanel() {
+  document.getElementById("login").hidden = true;
+  document.getElementById("panel").hidden = false;
+  load();
+}
+
+document.getElementById("login").addEventListener("submit", async e => {
+  e.preventDefault();
+  const pw = document.getElementById("pw").value.trim();
+  if (/[^\x20-\x7e]/.test(pw)) return MB.toast("パスワードに全角文字が含まれています。半角で入力してください", true);
+  try {
+    await MB.api("api/admin/login", { method: "POST", headers: { "X-Admin-Password": pw }, body: {} });
+    MB.setAdminPw(pw);
+    showPanel();
+  } catch (err) { MB.toast(err.message, true); }
+});
+
+document.getElementById("create").addEventListener("submit", async e => {
+  e.preventDefault();
+  const fields = {};
+  document.querySelectorAll("#cFields tr").forEach(tr => {
+    const o = {};
+    tr.querySelectorAll("[data-k]").forEach(el => { if (el.type === "checkbox") o.show = el.checked; else if (el.value) o[el.dataset.k] = el.dataset.k === "chart" ? +el.value : el.value; });
+    fields[tr.dataset.f] = o;
+  });
+  const btn = document.getElementById("cBtn");
+  btn.disabled = true;
+  try {
+    const r = await MB.api("api/admin/channels", { method: "POST", body: {
+      prefix: document.getElementById("cPrefix").value, start: +document.getElementById("cStart").value,
+      count: +document.getElementById("cCount").value, numbered: true,
+      public: document.getElementById("cPublic").checked, fields } });
+    MB.toast(`${r.length} チャネルを作りました`);
+    await load();
+  } catch (err) { MB.toast(err.message, true); }
+  btn.disabled = false;
+});
+
+["cPrefix", "cStart", "cCount"].forEach(id => document.getElementById(id).addEventListener("input", preview));
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => fieldRows(PRESETS[b.dataset.preset]));
+document.getElementById("btnPrint").onclick = printCards;
+document.getElementById("btnCsv").onclick = () => { location.href = "api/admin/keys.csv?pw=" + encodeURIComponent(MB.adminPw()); };
+document.getElementById("btnLogout").onclick = () => { MB.setAdminPw(""); location.reload(); };
+
+(async () => {
+  await MB.loadInfo();
+  MB.header("admin");
+  fieldRows();
+  preview();
+  if (MB.adminPw()) {
+    try { await MB.api("api/admin/login", { method: "POST", body: {} }); showPanel(); }
+    catch (_) { MB.setAdminPw(""); }
+  }
+})();
+</script>
+</body>
+</html>

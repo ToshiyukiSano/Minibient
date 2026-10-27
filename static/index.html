@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>みんなのチャネル - MiniBient</title>
+<link rel="icon" href="static/favicon.svg">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<main>
+  <h1>みんなのチャネル</h1>
+  <p class="lead">M5StickC から届いたデータを、チャネルごとに5秒おきに更新しています。カードを開くとグラフが見られます。</p>
+
+  <div class="toolbar">
+    <input id="filter" type="search" placeholder="名前やチャネルIDで絞り込み" aria-label="絞り込み" style="width:260px">
+    <div class="seg" role="group" aria-label="並び順">
+      <button data-sort="id" aria-pressed="true">ID順</button>
+      <button data-sort="recent" aria-pressed="false">受信が新しい順</button>
+    </div>
+    <span class="grow"></span>
+    <span class="status-line num" id="stat"></span>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="empty" id="empty" hidden></div>
+</main>
+
+<script src="static/common.js"></script>
+<script>
+let channels = [];
+let sortKey = "id";
+
+function tileHtml(c) {
+  const lp = c.lastpost ? Date.parse(c.lastpost) : 0;
+  const f = c.spark.field, fd = c.fields[f];
+  const v = c.latest ? c.latest[f] : undefined;
+  return `<a class="tile ${MB.freshness(lp)}" href="ch/${c.chId}" data-id="${c.chId}">
+    <div class="tile-head"><span class="tile-name">${MB.esc(c.name)}</span><span class="tile-id num">${c.chId}</span></div>
+    <div><div class="tile-label">${MB.esc(fd.name)}</div>
+      <div class="tile-val num">${MB.num(v)}<small>${MB.esc(fd.unit)}</small></div></div>
+    <canvas aria-hidden="true"></canvas>
+    <div class="tile-foot"><span><span class="dot"></span>${MB.ago(lp)}</span>
+      <span class="num">${c.latest ? MB.fmt(Date.parse(c.latest.created), false) : ""}</span></div>
+  </a>`;
+}
+
+function render() {
+  const q = document.getElementById("filter").value.trim().toLowerCase();
+  let list = channels.filter(c => !q || c.name.toLowerCase().includes(q) || String(c.chId).includes(q));
+  if (sortKey === "recent") list = list.slice().sort((a, b) => (Date.parse(b.lastpost || 0) || 0) - (Date.parse(a.lastpost || 0) || 0));
+  const tiles = document.getElementById("tiles");
+  tiles.innerHTML = list.map(tileHtml).join("");
+  tiles.querySelectorAll(".tile").forEach(el => {
+    const c = channels.find(x => x.chId == el.dataset.id);
+    MB.sparkline(el.querySelector("canvas"), c.spark.points, c.fields[c.spark.field].color);
+  });
+  const empty = document.getElementById("empty");
+  if (!channels.length) {
+    empty.hidden = false;
+    empty.innerHTML = `<strong>公開中のチャネルはまだありません</strong>
+      講師の方は <a href="admin">管理画面</a> から受講者分のチャネルをまとめて作成できます。`;
+  } else if (!list.length) {
+    empty.hidden = false;
+    empty.innerHTML = `<strong>「${MB.esc(q)}」に一致するチャネルはありません</strong>`;
+  } else empty.hidden = true;
+  const live = channels.filter(c => MB.freshness(Date.parse(c.lastpost || 0)) === "live").length;
+  document.getElementById("stat").textContent = `${channels.length} チャネル / 直近1分に受信 ${live}`;
+}
+
+async function refresh() {
+  try {
+    channels = await MB.api("api/ui/overview");
+    render();
+  } catch (e) {
+    document.getElementById("stat").textContent = "サーバーに接続できません: " + e.message;
+  }
+}
+
+document.getElementById("filter").addEventListener("input", render);
+document.querySelectorAll("[data-sort]").forEach(b => b.addEventListener("click", () => {
+  sortKey = b.dataset.sort;
+  document.querySelectorAll("[data-sort]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  render();
+}));
+window.addEventListener("resize", render);
+
+(async () => {
+  await MB.loadInfo();
+  MB.header("home");
+  await refresh();
+  setInterval(refresh, 5000);
+})();
+</script>
+</body>
+</html>
