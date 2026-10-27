@@ -1,5 +1,5 @@
 /*
- * M5StickC の加速度とバッテリー電圧を MiniBient（Ambient 互換サーバー）に送るサンプル
+ * M5StickC の加速度とバッテリー電圧を MiniBient サーバーに送るサンプル
  *
  * 対応機種: M5StickC / M5StickC Plus / M5StickC Plus2（M5Unified ライブラリを使用）
  * 必要なライブラリ: M5Unified（ライブラリマネージャーからインストール）, MinibientClient
@@ -31,7 +31,7 @@ const uint32_t SEND_INTERVAL_MS = 30 * 1000;     // 送信間隔（30秒）。�
 
 WiFiClientSecure secureClient;   // https 用
 WiFiClient plainClient;          // http 用
-MinibientClient ambient;
+MinibientClient mb;
 uint32_t lastSend = 0;
 uint32_t sentCount = 0;
 
@@ -67,17 +67,17 @@ void sendData(const char *comment) {
   M5.Imu.getAccel(&ax, &ay, &az);
   float vbat = M5.Power.getBatteryVoltage() / 1000.0f;  // mV → V
 
-  ambient.set(1, ax);
-  ambient.set(2, ay);
-  ambient.set(3, az);
-  ambient.set(4, vbat);
-  if (comment) ambient.setcmnt(comment);
+  mb.set(1, ax);
+  mb.set(2, ay);
+  mb.set(3, az);
+  mb.set(4, vbat);
+  if (comment) mb.setcmnt(comment);
 
-  bool ok = ambient.send();
+  bool ok = mb.send();
   if (ok) sentCount++;
 
   Serial.printf("ax=%.3f ay=%.3f az=%.3f vbat=%.2f -> %d %s\n",
-                ax, ay, az, vbat, ambient.status, ambient.errorString().c_str());
+                ax, ay, az, vbat, mb.status, mb.errorString().c_str());
 
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setCursor(0, 0);
@@ -85,7 +85,7 @@ void sendData(const char *comment) {
   M5.Display.printf("%s #%lu\n", ok ? "SEND OK" : "SEND NG", (unsigned long)sentCount);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.printf("X %+.2f\nY %+.2f\nZ %+.2f\nBAT %.2fV\n", ax, ay, az, vbat);
-  if (!ok) M5.Display.printf("err %d\n", ambient.status);  // 429 = 前回から25秒以内に送った
+  if (!ok) M5.Display.printf("err %d\n", mb.status);  // 429 = 前回から25秒以内に送った
 }
 
 void setup() {
@@ -98,9 +98,9 @@ void setup() {
   connectWiFi();
   if (SERVER_PORT == 443) {
     secureClient.setInsecure();  // 証明書の確認を省略（通信の暗号化はされます）
-    ambient.begin(CHANNEL_ID, WRITE_KEY, &secureClient, SERVER_HOST, SERVER_PORT, SERVER_PATH);
+    mb.begin(CHANNEL_ID, WRITE_KEY, &secureClient, SERVER_HOST, SERVER_PORT, SERVER_PATH);
   } else {
-    ambient.begin(CHANNEL_ID, WRITE_KEY, &plainClient, SERVER_HOST, SERVER_PORT, SERVER_PATH);
+    mb.begin(CHANNEL_ID, WRITE_KEY, &plainClient, SERVER_HOST, SERVER_PORT, SERVER_PATH);
   }
   sendData("起動");
   lastSend = millis();

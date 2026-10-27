@@ -266,7 +266,7 @@ function showHow() {
   const sec = minSec ? Math.max(30, minSec + 5) : 10;  // 制限ちょうどだと通信の遅れではじかれるので余裕を持たせる
   const beginArgs = `${ch.chId}, "${MB.esc(wk)}", &amp;client, "${MB.esc(host)}", ${port}${base ? `, "${MB.esc(base)}"` : ""}`;
   document.getElementById("howBody").innerHTML = `
-    <p style="margin:0">送り方は <a href="https://ambidata.io/" target="_blank" rel="noopener">Ambient</a> と同じです。接続先だけをこのサーバーに変えます。</p>
+    <p style="margin:0">次の情報をプログラムに書き込んで送ります。</p>
     <div class="ch-meta num" style="font-size:15px">
       <span>サーバー <span class="keybox">${MB.esc(host)}</span></span>
       <span>ポート <span class="keybox">${port}</span></span>
@@ -281,16 +281,16 @@ function showHow() {
 ${https ? "#include &lt;WiFiClientSecure.h&gt;\n" : ""}#include "MinibientClient.h"
 
 ${https ? "WiFiClientSecure client;   // https で送るとき" : "WiFiClient client;"}
-MinibientClient ambient;
+MinibientClient mb;
 
 void setup() {
   // …WiFi 接続のあと
-${https ? "  client.setInsecure();      // 証明書の確認を省略（暗号化はされます）\n" : ""}  ambient.begin(${beginArgs});
+${https ? "  client.setInsecure();      // 証明書の確認を省略（暗号化はされます）\n" : ""}  mb.begin(${beginArgs});
 }
 
 void loop() {
-${fields.map((f, i) => `  ambient.set(${f.slice(1)}, value${i + 1});   // ${MB.esc(ch.fields[f].name)}`).join("\n")}
-  ambient.send();
+${fields.map((f, i) => `  mb.set(${f.slice(1)}, value${i + 1});   // ${MB.esc(ch.fields[f].name)}`).join("\n")}
+  mb.send();
   delay(${sec * 1000});   // ${sec}秒ごと${minSec ? `（${minSec}秒より短い間隔の送信は受け付けられません）` : ""}
 }</pre></div>
     <div><b>UIFlow / MicroPython</b>

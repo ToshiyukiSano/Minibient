@@ -21,7 +21,7 @@ const unsigned int CHANNEL_ID = 10001;
 const char *WRITE_KEY = "0123456789abcdef";
 
 SecureClient client;   // https 用（http で送るなら WiFiClient client; に）
-MinibientClient ambient;
+MinibientClient mb;
 
 void setup() {
   Serial.begin(115200);
@@ -29,16 +29,16 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) { delay(300); Serial.print("."); }
   Serial.println(WiFi.localIP());
   client.setInsecure();  // 証明書の確認を省略（暗号化はされる）
-  ambient.begin(CHANNEL_ID, WRITE_KEY, &client, SERVER_HOST, SERVER_PORT);
+  mb.begin(CHANNEL_ID, WRITE_KEY, &client, SERVER_HOST, SERVER_PORT);
 }
 
 void loop() {
-  ambient.set(1, random(0, 1000) / 10.0);
-  if (ambient.send()) {
+  mb.set(1, random(0, 1000) / 10.0);
+  if (mb.send()) {
     Serial.println("送信OK");
   } else {
-    Serial.printf("送信失敗: %d %s\n", ambient.status, ambient.errorString().c_str());
-    Serial.println(ambient.response);
+    Serial.printf("送信失敗: %d %s\n", mb.status, mb.errorString().c_str());
+    Serial.println(mb.response);
   }
   delay(30000);
 }

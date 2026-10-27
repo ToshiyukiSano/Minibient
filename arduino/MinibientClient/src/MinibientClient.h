@@ -1,20 +1,19 @@
 /*
- * MinibientClient - Ambient (ambidata.io) 互換サーバーへデータを送る小さなライブラリ
+ * MinibientClient - MiniBient サーバーへセンサーのデータを送る小さなライブラリ
  *
- * 公式 Ambient ライブラリとほぼ同じ使い方で、送信先のサーバーとポートを指定できます。
- * MiniBient（自前サーバー）にも、本家 ambidata.io にも送れます。
+ * 送信先のサーバー・ポート・フォルダーを指定して、d1〜d8 のデータを送ります。
  *
- *   MinibientClient ambient;
- *   ambient.begin(channelId, writeKey, &client, "192.168.1.10", 8080);
+ *   MinibientClient mb;
+ *   mb.begin(channelId, writeKey, &client, "192.168.1.10", 8080);
  *
  *   // https（暗号化）で送る場合: WiFiClientSecure を使い、ポートを 443 にする
  *   //   WiFiClientSecure client;
  *   //   client.setInsecure();   // 証明書の確認を省略（暗号化はされる）
- *   //   ambient.begin(channelId, writeKey, &client, "example.com", 443);
+ *   //   mb.begin(channelId, writeKey, &client, "example.com", 443);
  *   // レンタルサーバーのサブフォルダーに置いた場合:
- *   // ambient.begin(channelId, writeKey, &client, "example.sakura.ne.jp", 80, "/minibient");
- *   ambient.set(1, 23.5);
- *   ambient.send();
+ *   // mb.begin(channelId, writeKey, &client, "example.sakura.ne.jp", 80, "/minibient");
+ *   mb.set(1, 23.5);
+ *   mb.send();
  *
  * 対応: ESP32 (M5StickC / M5StickC Plus / Plus2 / M5Stack など), ESP8266
  */
@@ -41,7 +40,7 @@ public:
   // basePath はサーバーをサブフォルダーに置いた場合のフォルダー（例 "/minibient"）
   // port が 443 のときは https で送ります（client には WiFiClientSecure を渡してください）
   bool begin(unsigned int channelId, const char *writeKey, WiFiClient *client,
-             const char *host = "ambidata.io", uint16_t port = 80, const char *basePath = "");
+             const char *host, uint16_t port = 80, const char *basePath = "");
 
   bool set(int field, double value);     // field: 1〜8 = d1〜d8, 9 = lat, 10 = lng
   bool set(int field, int value);

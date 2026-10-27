@@ -1,5 +1,5 @@
 [Unit]
-Description=MiniBient (Ambient compatible IoT data server)
+Description=MiniBient (IoT data visualization server)
 After=network-online.target
 Wants=network-online.target
 

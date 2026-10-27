@@ -1,6 +1,4 @@
-# minibient_client.py - Ambient 互換サーバー (MiniBient / ambidata.io) へ送る MicroPython / Python 用ライブラリ
-#
-# 公式 ambient-python-lib と同じ使い方で、送信先サーバーを指定できます。
+# minibient_client.py - MiniBient サーバーへデータを送る MicroPython / Python 用ライブラリ
 #
 #   import minibient_client
 #   am = minibient_client.MinibientClient(10001, "0123456789abcdef", host="example.com", port=443)   # https
@@ -19,7 +17,7 @@ except ImportError:
 
 
 class MinibientClient:
-    def __init__(self, channelId, writeKey, readKey=None, host="ambidata.io", port=80, path="", https=None):
+    def __init__(self, channelId, writeKey, readKey=None, host="localhost", port=80, path="", https=None):
         # path: サブフォルダーに置いた場合のフォルダー（例 "/minibient"）
         # https: None なら port が 443 のとき https で送る
         self.channelId = channelId

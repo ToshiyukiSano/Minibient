@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-MiniBient - Ambient (ambidata.io) 互換の小さな IoT データ可視化サーバー
+MiniBient - 小さな IoT データ可視化サーバー
 
   * Python 3.8 以降の標準ライブラリだけで動きます（pip install 不要）
-  * Ambient と同じ API でデータを受け取ります
+  * シンプルな JSON の API でデータを受け取ります
       POST /api/v2/channels/{id}/data       {"writeKey":..., "d1":..., ..., "d8":..., "lat", "lng", "created", "cmnt"}
       POST /api/v2/channels/{id}/dataarray  {"writeKey":..., "data":[{...}, ...]}
       GET  /api/v2/channels/{id}/data?readKey=...&n=10   (新しい順)
@@ -117,7 +117,7 @@ class DB:
         cols = [r[1] for r in self.conn.execute("PRAGMA table_info(channels)")]
         if "owner_id" not in cols:  # 旧バージョンの DB からの移行
             self.conn.execute("ALTER TABLE channels ADD COLUMN owner_id INTEGER")
-        # チャネルIDを Ambient 風の5桁から始める
+        # チャネルIDを5桁から始める
         cur = self.conn.execute("SELECT seq FROM sqlite_sequence WHERE name='channels'")
         if cur.fetchone() is None and self.conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0] == 0:
             self.conn.execute("INSERT INTO sqlite_sequence(name, seq) VALUES('channels', 10000)")
@@ -151,7 +151,7 @@ DBH = None  # type: DB
 
 
 def gen_key():
-    return secrets.token_hex(8)  # 16文字（Ambient と同じ長さ）
+    return secrets.token_hex(8)  # 16文字
 
 
 def default_fields():
@@ -196,7 +196,7 @@ def channel_public_info(ch, with_keys=False):
         "lastpost": iso(ch["last_post"]) if ch["last_post"] else None,
         "ownerId": ch["owner_id"],
     }
-    # Ambient の getprop と似た形 (d1: {name, color}) も付けておく
+    # 各フィールドを d1: {name, color} の形でも付けておく
     for f, v in info["fields"].items():
         info[f] = {"name": v["name"], "color": v["color"]}
     if with_keys:
@@ -348,7 +348,7 @@ def local_day_range(date_str):
 
 
 def query_data(ch, params):
-    """Ambient の GET /data と同じパラメーター + 拡張 (after=ミリ秒, limit)"""
+    """パラメーター: n, skip, date, start/end, after(ミリ秒), limit"""
     p = {k: v[0] for k, v in params.items()}
     now = int(time.time() * 1000)
     where, args = ["channel_id=?", "hide=0"], [ch["id"]]
@@ -574,7 +574,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_text(body, 200, MIME.get(ext, "application/octet-stream"), {"Cache-Control": cache})
 
 
-# ---------------------------------------------------------------- Ambient compatible API
+# ---------------------------------------------------------------- data API
 def _channel_or_404(cid):
     ch = get_channel(int(cid))
     if ch is None:
@@ -647,7 +647,7 @@ def api_get_data(h, cid):
 
 @route("PUT", r"/api/v2/channels/(\d+)/data")
 def api_put_data(h, cid):
-    """Ambient の putcmnt / sethide 互換: {"writeKey","created","cmnt"} or {"writeKey","created","hide"}"""
+    """コメント・非表示の設定: {"writeKey","created","cmnt"} or {"writeKey","created","hide"}"""
     ch = _channel_or_404(cid)
     body = h.read_json()
     _check_write(h, ch, body)
@@ -1346,7 +1346,7 @@ def env_bool(name, default):
 
 def main():
     global DBH
-    ap = argparse.ArgumentParser(description="MiniBient: Ambient 互換 IoT データ可視化サーバー")
+    ap = argparse.ArgumentParser(description="MiniBient: IoT データ可視化サーバー")
     ap.add_argument("--host", default=os.environ.get("MB_HOST", CFG.host))
     ap.add_argument("--port", type=int, default=int(os.environ.get("MB_PORT", CFG.port)))
     ap.add_argument("--db", default=os.environ.get("MB_DB", CFG.db), help="SQLite ファイルのパス")
@@ -1394,7 +1394,7 @@ def main():
     httpd.daemon_threads = True
 
     print("=" * 60)
-    print(" MiniBient %s  (Ambient 互換 IoT データ可視化サーバー)" % VERSION)
+    print(" MiniBient %s  (IoT データ可視化サーバー)" % VERSION)
     print("=" * 60)
     print(" 画面      : http://localhost:%d/" % CFG.port)
     for ip in local_ips():

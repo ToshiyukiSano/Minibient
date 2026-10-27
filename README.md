@@ -1,7 +1,7 @@
-# MiniBient — Ambient 互換の IoT データ可視化サーバー
+# MiniBient — 小さな IoT データ可視化サーバー
 
 M5StickC などのマイコンから送ったデータを保存して、グラフで見られるサーバーです。
-[Ambient](https://ambidata.io/) と同じ API でデータを受け取るので、Ambient 向けの送り方がほぼそのまま使えます。
+シンプルな JSON の API でデータを受け取るので、curl やマイコンから簡単に送れます。
 講座で使いやすいように、**招待コード制のユーザー登録**、**受講者分のチャネルの一括作成とキーカードの印刷**、**全員のデータの一覧表示**ができます。
 
 - Python 3.8 以降だけで動きます（追加インストール不要）。Windows / Mac / Linux / Raspberry Pi / VPS
@@ -14,7 +14,7 @@ minibient/
 ├── server.py              サーバー本体
 ├── static/                画面（HTML/CSS/JS）
 ├── tools/simulate.py      M5StickC の代わりにダミーデータを送るテスト用
-├── arduino/MinibientClient/   Arduino 用ライブラリ（送信先を指定できる Ambient 互換）
+├── arduino/MinibientClient/   Arduino 用ライブラリ（MinibientClient）
 ├── micropython/           UIFlow 1 / UIFlow 2 / MicroPython 用
 ├── sakura/                レンタルサーバー（CGI）用の index.cgi・.htaccess・check.cgi
 ├── start.bat / start.sh   起動用
@@ -95,26 +95,27 @@ python3 tools/simulate.py --server http://localhost:8080 --admin-password XXXX -
 
 ### Arduino IDE の場合
 
-公式の Ambient ライブラリは送信先が `ambidata.io` に固定されているため、送信先を指定できる **MinibientClient** を同梱しています。
+送信には、同梱の Arduino 用ライブラリ **MinibientClient** を使います。
 
 1. `arduino/MinibientClient` フォルダーを `Documents/Arduino/libraries/` にコピー
    （または `MinibientClient` フォルダーを zip にして、Arduino IDE の「スケッチ → ライブラリをインクルード → .ZIP 形式のライブラリをインストール」で追加）
 2. ライブラリマネージャーで **M5Unified** をインストール
 3. 「ファイル → スケッチ例 → MinibientClient → M5StickC_IMU」を開き、先頭の WiFi・サーバー・チャネルID・ライトキーを書きかえて書き込み
 
-公式 Ambient ライブラリで書いたプログラムからの変更点は3行だけです。
+基本の書き方は次のとおりです。
 
-```diff
-- #include "Ambient.h"
-- Ambient ambient;
-- ambient.begin(channelId, writeKey, &client);
-+ #include "MinibientClient.h"
-+ MinibientClient ambient;
-+ ambient.begin(channelId, writeKey, &client, "192.168.1.10", 8080);
+```cpp
+#include "MinibientClient.h"
+WiFiClient client;
+MinibientClient mb;
+
+mb.begin(10001, "ライトキー", &client, "192.168.1.10", 8080);  // チャネルID・ライトキー・サーバー・ポート
+mb.set(1, 23.5);   // d1
+mb.set(2, 60);     // d2
+mb.send();
 ```
 
-`set()` / `setcmnt()` / `send()` / `bulk_send()` はそのまま使えます。送信に失敗したら `ambient.status` と `ambient.errorString()`（「ライトキーが違います」など）で原因がわかります。
-本家に送りたいときは `begin(..., "ambidata.io", 80)` にすれば ambidata.io にも送れます。
+送信に失敗したら `mb.status` と `mb.errorString()`（「ライトキーが違います」など）で原因がわかります。
 
 ### UIFlow の場合
 
@@ -132,7 +133,7 @@ curl -X POST http://192.168.1.10:8080/api/v2/channels/10001/data \
 
 ---
 
-## 4. API（Ambient 互換）
+## 4. API
 
 | メソッド | パス | 内容 |
 |---|---|---|
@@ -149,7 +150,7 @@ curl -X POST http://192.168.1.10:8080/api/v2/channels/10001/data \
 - 送信間隔の制限は1チャネル単位です。一括送信（`/dataarray`）は1回の送信として数えます。管理パスワード付きの送信は制限されません
 - 拡張：`GET .../data?after=<ミリ秒>` でそれ以降のデータだけを取得（画面の自動更新に使用）
 
-本家 Ambient との違い：マイコンからの送信はライトキーだけで行います（ログインは不要）。チャネルの設定変更は、持ち主がログインするか、チャネル画面の「設定」でライトキーを入れると行えます。送信間隔は既定で25秒以上（`--min-interval` で変更）です。
+マイコンからの送信はライトキーだけで行います（ログインは不要）。チャネルの設定変更は、持ち主がログインするか、チャネル画面の「設定」でライトキーを入れると行えます。送信間隔は既定で25秒以上（`--min-interval` で変更）です。
 
 画面用の API（`/api/auth/*`, `/api/me/*`, `/api/ui/*`, `/api/admin/*`）は、ログインの Cookie または管理パスワード（`X-Admin-Password` ヘッダー）で認証します。
 
@@ -216,7 +217,7 @@ www/minibient/
 M5StickC は **http（ポート 80）** で、フォルダー名を付けて送ります。チャネルページの「送信方法」に、そのまま使えるコードが表示されます。
 
 ```cpp
-ambient.begin(10001, "ライトキー", &client, "あなたのドメイン", 80, "/minibient");
+mb.begin(10001, "ライトキー", &client, "あなたのドメイン", 80, "/minibient");
 ```
 
 UIFlow の場合は `SERVER = "http://あなたのドメイン/minibient"` です。
@@ -241,7 +242,7 @@ M5StickC から https で送るには、MinibientClient（1.1 以降）で `WiFi
 WiFiClientSecure client;
 ...
 client.setInsecure();   // 証明書の確認を省略（通信は暗号化されます）
-ambient.begin(10001, "ライトキー", &client, "example.com", 443);
+mb.begin(10001, "ライトキー", &client, "example.com", 443);
 ```
 
 `setInsecure()` は証明書の確認を省略する設定です。Let's Encrypt の証明書が3ヶ月ごとに更新されても止まらないので、講座用途ではこれが扱いやすい方法です。https の送信は暗号化の準備のぶん、http より1〜2秒ほど長くかかります。UIFlow は `SERVER = "https://example.com"` のように https で書くだけで送れます。
@@ -255,5 +256,3 @@ ambient.begin(10001, "ライトキー", &client, "example.com", 443);
 ## ライセンス
 
 MIT License（[LICENSE](LICENSE)）。同梱の Chart.js も MIT ライセンスです（`static/vendor/chart.js.LICENSE.md`）。
-
-MiniBient は [Ambient](https://ambidata.io/) とデータ送信の形式（API）をそろえた独立したソフトウェアで、アンビエントデーター株式会社とは関係ありません。
